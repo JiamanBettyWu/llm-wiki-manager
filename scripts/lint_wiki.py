@@ -279,6 +279,29 @@ def check_slug_conventions(md_files: list[Path]) -> list[Path]:
     return bad
 
 
+def check_backticked_wikilinks(md_files: list[Path]) -> list[dict]:
+    """Wiki-links trapped inside an inline-code span — `[[slug]]` — which
+    Obsidian renders as literal text instead of resolving as a link. A silent
+    dead link: it looks right in the source but never navigates.
+
+    Returns a list of {"path", "line", "snippet"} dicts, one per occurrence.
+    `WIKILINK_PATTERN` (module-level) already matches a bare [[slug]] / [[slug|alias]].
+    """
+    results: list[dict] = []
+    code_span = re.compile(r"`([^`\n]+)`")          # text between single backticks
+    for md in md_files:
+        text = md.read_text(encoding="utf-8", errors="replace")
+        for line_num, line in enumerate(text.splitlines(), 1):   # (num, text)
+            for m in code_span.finditer(line):       # each span on the line
+                if WIKILINK_PATTERN.search(m.group(0)):   # wikilink inside it?
+                    results.append({
+                        "path": str(md),
+                        "line": line_num,
+                        "snippet": m.group(0),       # includes the backticks
+                    })
+    return results
+
+
 def render_report(results: dict, root: Path, thresholds: dict) -> str:
     """Render the lint report as markdown."""
     today = dt.date.today().isoformat()
@@ -297,6 +320,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["index_missing"])
         + len(results["stubs"])
         + len(results["slug_mismatch"])
+        + len(results["backticked_links"])
     )
     suggestion_count = len(results["log_gaps"])
 
@@ -365,6 +389,21 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             )
             for p in results["slug_mismatch"]:
                 lines.append(f"- `{p}`")
+            lines.append("")
+        if results["backticked_links"]:
+            lines.append(
+                f"### Backticked wiki-links — won't resolve "
+                f"({len(results['backticked_links'])})\n"
+            )
+            lines.append(
+                "`[[slug]]` inside an inline-code span renders as literal text, "
+                "not a link. Unwrap the backticks (or, if showing the syntax on "
+                "purpose, ignore).\n"
+            )
+            for entry in results["backticked_links"]:
+                lines.append(
+                    f"- `{entry['path']}` line {entry['line']}: {entry['snippet']}"
+                )
             lines.append("")
 
     # SUGGESTIONS
@@ -495,6 +534,7 @@ def main() -> int:
     stubs = check_stub_pages(md_files, args.stub_words)
     log_gaps = check_log_gaps(wiki_dir, args.log_gap_days)
     slug_mismatch = check_slug_conventions(md_files)
+    backticked = check_backticked_wikilinks(md_files)
 
     results = {
         "broken_links": broken,
@@ -505,6 +545,7 @@ def main() -> int:
         "stubs": stubs,
         "log_gaps": log_gaps,
         "slug_mismatch": slug_mismatch,
+        "backticked_links": backticked,
     }
 
     report = render_report(
@@ -515,6 +556,7 @@ def main() -> int:
     block_total = len(broken) + len(raw_missing) + len(index_dead)
     quality_count = (
         len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
+        + len(backticked)
     )
     suggestion_count = len(log_gaps)
 
