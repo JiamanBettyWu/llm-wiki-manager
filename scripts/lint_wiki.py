@@ -37,8 +37,10 @@ from pathlib import Path
 LINK_PATTERN = re.compile(
     r"\[(?P<text>[^\]]+)\]\((?P<url>[^)\s]+)(?:\s+\"[^\"]*\")?\)"
 )
-# Obsidian wiki-links: [[slug]] or [[slug|alias]]
-WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+# Obsidian wiki-links: [[slug]], [[slug|alias]], or [[slug\|alias]] (the pipe is
+# escaped as \| inside Markdown tables so it isn't read as a column delimiter).
+# Excluding \ from the slug group keeps the trailing backslash out of the slug.
+WIKILINK_PATTERN = re.compile(r"\[\[([^\]|\\]+)(?:\\?\|[^\]]*)?\]\]")
 LOG_DATE_PATTERN = re.compile(r"^## \[(\d{4}-\d{2}-\d{2})\]")
 INDEX_LINK_PATTERN = re.compile(
     r"^\s*-\s*\[([^\]]+)\]\(([^)]+)\)"
@@ -156,6 +158,14 @@ def collect_links(md_path: Path, wiki_dir: Path) -> list[tuple[str, Path]]:
 
     for m in WIKILINK_PATTERN.finditer(text):
         slug = m.group(1).strip()
+        # Attachment embed (`![[image.png]]`, `[[doc.pdf]]`): a file with an
+        # extension, not a page. Resolve the literal filename across the vault
+        # (wiki/ + raw/ + ...), don't append .md.
+        if re.search(r"\.[A-Za-z0-9]+$", slug):
+            found = list(wiki_dir.parent.rglob(slug))
+            resolved = found[0].resolve() if found else (wiki_dir / slug).resolve()
+            out.append((f"[[{slug}]]", resolved))
+            continue
         matches = list(wiki_dir.rglob(f"{slug}.md"))
         if matches:
             out.append((f"[[{slug}]]", matches[0].resolve()))
