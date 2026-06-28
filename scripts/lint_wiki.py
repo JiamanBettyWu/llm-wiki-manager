@@ -191,32 +191,36 @@ def check_wikilink_collisions(md_files: list[Path], wiki_dir: Path) -> list[dict
 
 def check_broken_links(
     md_files: list[Path], wiki_dir: Path, raw_dir: Path,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
-    Two outputs:
-      - broken: links pointing to non-existent files inside the wiki repo
+    Three outputs:
+      - broken: *markdown* links pointing to non-existent files inside the wiki
+        (real rot — a moved or deleted page)
       - raw_missing: links to raw/ files that don't exist
+      - dangling: *wiki-links* `[[slug]]` whose page doesn't exist yet. In
+        Obsidian these are first-class "pages worth creating", not errors, so
+        they are reported informationally, never as block-level rot.
     """
     broken: list[dict] = []
     raw_missing: list[dict] = []
+    dangling: list[dict] = []
     for md in md_files:
         for url, resolved in collect_links(md, wiki_dir):
-            if not resolved.exists():
-                # Categorize: is the target inside raw/ ?
-                try:
-                    resolved.relative_to(raw_dir)
-                    raw_missing.append({
-                        "from": str(md),
-                        "url": url,
-                        "resolved": str(resolved),
-                    })
-                except ValueError:
-                    broken.append({
-                        "from": str(md),
-                        "url": url,
-                        "resolved": str(resolved),
-                    })
-    return broken, raw_missing
+            if resolved.exists():
+                continue
+            entry = {"from": str(md), "url": url, "resolved": str(resolved)}
+            # Categorize: raw/ miss, dangling wiki-link, or broken markdown link.
+            try:
+                resolved.relative_to(raw_dir)
+                raw_missing.append(entry)
+                continue
+            except ValueError:
+                pass
+            if url.startswith("[["):   # Obsidian wiki-link → dangling, not rot
+                dangling.append(entry)
+            else:
+                broken.append(entry)
+    return broken, raw_missing, dangling
 
 
 def check_orphans(md_files: list[Path], wiki_dir: Path, root: Path) -> list[Path]:
@@ -500,6 +504,39 @@ def check_slug_conventions(md_files: list[Path]) -> list[Path]:
     return bad
 
 
+def check_backticked_wikilinks(md_files: list[Path], wiki_dir: Path) -> list[dict]:
+    """Wiki-links trapped inside an inline-code span — `[[slug]]` — which
+    Obsidian renders as literal text instead of resolving as a link. A silent
+    dead link: it looks right in the source but never navigates.
+
+    Only a backticked wiki-link whose target **resolves to a real page** is
+    reported. That separates genuine mistakes (a backticked link to a page that
+    exists — you meant it to navigate) from intentional syntax examples that
+    document the `[[slug]]` form with placeholders like `[[slug]]` or `[[link]]`
+    (those resolve to nothing, so they are ignored — no allowlist needed).
+    Limitation: a backticked link to a not-yet-created page is not flagged,
+    being indistinguishable from a placeholder.
+
+    Returns a list of {"path", "line", "snippet"} dicts, one per occurrence.
+    """
+    results: list[dict] = []
+    code_span = re.compile(r"`([^`\n]+)`")          # text between single backticks
+    for md in md_files:
+        text = md.read_text(encoding="utf-8", errors="replace")
+        for line_num, line in enumerate(text.splitlines(), 1):
+            for m in code_span.finditer(line):       # each inline-code span
+                for wl in WIKILINK_PATTERN.finditer(m.group(0)):
+                    slug = wl.group(1).strip()
+                    if list(wiki_dir.rglob(f"{slug}.md")):   # resolves → real bug
+                        results.append({
+                            "path": str(md),
+                            "line": line_num,
+                            "snippet": m.group(0),
+                        })
+                        break
+    return results
+
+
 def render_report(results: dict, root: Path, thresholds: dict) -> str:
     """Render the lint report as markdown."""
     today = dt.date.today().isoformat()
@@ -522,11 +559,13 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["hot_health"])
         + len(results["overtagged"])
         + len(results["wikilink_collisions"])
+        + len(results["backticked_links"])
     )
     suggestion_count = (
         len(results["log_gaps"])
         + len(results["single_use_tags"])
         + (1 if results["schema_version"] else 0)
+        + len(results["dangling_links"])
     )
 
     lines.append(
@@ -542,8 +581,9 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         if results["broken_links"]:
             lines.append(f"### Broken links ({len(results['broken_links'])})\n")
             lines.append(
-                "Markdown links and `[[wiki-links]]` pointing to files that don't "
-                "exist inside the wiki.\n"
+                "Markdown links pointing to files that don't exist inside the wiki "
+                "(a moved or deleted page). Dangling `[[wiki-links]]` are listed "
+                "separately under Suggestions.\n"
             )
             for entry in results["broken_links"]:
                 lines.append(
@@ -642,12 +682,42 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
                     + ", ".join(f"`{m}`" for m in c["matches"])
                 )
             lines.append("")
+        if results["backticked_links"]:
+            lines.append(
+                f"### Backticked wiki-links — won't resolve "
+                f"({len(results['backticked_links'])})\n"
+            )
+            lines.append(
+                "A wiki-link inside an inline-code span renders as literal text, "
+                "not a link — a silent dead link. Unwrap the backticks. Only links "
+                "that resolve to a real page are reported, so syntax-example "
+                "placeholders (`[[slug]]`, `[[link]]`) are not flagged.\n"
+            )
+            for entry in results["backticked_links"]:
+                lines.append(
+                    f"- `{entry['path']}` line {entry['line']}: {entry['snippet']}"
+                )
+            lines.append("")
 
     # SUGGESTIONS
     lines.append("## Suggestions (informational)\n")
     if not suggestion_count:
         lines.append("None. ✓\n")
     else:
+        if results["dangling_links"]:
+            lines.append(
+                f"### Dangling wiki-links — pages worth creating "
+                f"({len(results['dangling_links'])})\n"
+            )
+            lines.append(
+                "`[[slug]]` links whose page doesn't exist yet. In Obsidian these "
+                "are first-class staging markers, not errors — left informational. "
+                "Scan for unintended ones (a typo, a stray `\\`, or an image embed "
+                "that should be `![[...]]`).\n"
+            )
+            for d in results["dangling_links"]:
+                lines.append(f"- `{d['from']}`: {d['url']}")
+            lines.append("")
         if results["log_gaps"]:
             lines.append(
                 f"### Log gaps over {thresholds['log_gap_days']} days "
@@ -797,7 +867,7 @@ def main() -> int:
 
     md_files = find_md_files(wiki_dir)
 
-    broken, raw_missing = check_broken_links(md_files, wiki_dir, raw_dir)
+    broken, raw_missing, dangling = check_broken_links(md_files, wiki_dir, raw_dir)
     orphans = check_orphans(md_files, wiki_dir, root)
     index_missing, index_dead = check_index_drift(md_files, wiki_dir)
     stubs = check_stub_pages(md_files, args.stub_words)
@@ -808,10 +878,15 @@ def main() -> int:
     single_use_tags, overtagged, tag_unparsed = check_tag_health(md_files, args.max_tags)
     wikilink_collisions = check_wikilink_collisions(md_files, wiki_dir)
     schema_version = check_schema_version(root)
+    # hot.md is excluded from the structural checks (meta file), but it's
+    # hand-written narrative prose where backticked real links matter too.
+    backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
+    backticked = check_backticked_wikilinks(backticked_files, wiki_dir)
 
     results = {
         "broken_links": broken,
         "raw_missing": raw_missing,
+        "dangling_links": dangling,
         "orphans": orphans,
         "index_missing": index_missing,
         "index_dead": index_dead,
@@ -825,6 +900,7 @@ def main() -> int:
         "tag_unparsed": tag_unparsed,
         "wikilink_collisions": wikilink_collisions,
         "schema_version": schema_version,
+        "backticked_links": backticked,
     }
 
     report = render_report(
@@ -840,10 +916,11 @@ def main() -> int:
     quality_count = (
         len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
         + len(index_duplicates) + len(hot_health) + len(overtagged)
-        + len(wikilink_collisions)
+        + len(wikilink_collisions) + len(backticked)
     )
     suggestion_count = (
         len(log_gaps) + len(single_use_tags) + (1 if schema_version else 0)
+        + len(dangling)
     )
 
     # Decide where the report goes.
