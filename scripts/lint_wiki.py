@@ -533,6 +533,42 @@ def check_slug_conventions(md_files: list[Path]) -> list[Path]:
     return bad
 
 
+def check_broken_anchors(md_files: list[Path]) -> list[dict]:
+    """Same-page heading links — `[[#Section]]` — pointing at no such heading.
+
+    An in-page anchor names no page, so the dangling-link check cannot see it:
+    rename the heading and the link fails silently, looking correct in the
+    source but navigating nowhere. Pages that open with a table of contents
+    depend on these, so a stale one is a real defect.
+
+    Matching follows Obsidian: the anchor is the heading's own text, compared
+    case-insensitively with whitespace collapsed. Block references (`[[#^id]]`)
+    are skipped — those address a block, not a heading.
+    """
+    out: list[dict] = []
+
+    def norm(text: str) -> str:
+        return " ".join(text.split()).casefold()
+
+    for md in md_files:
+        text = md.read_text(encoding="utf-8", errors="replace")
+        headings = {norm(m.group(1)) for m in re.finditer(r"(?m)^#{1,6} +(.+?)\s*$", text)}
+        if not headings:
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            for m in re.finditer(r"\[\[#([^\]|\\]+)(?:\\?\|[^\]]*)?\]\]", line):
+                target = m.group(1).strip()
+                if target.startswith("^"):
+                    continue
+                if norm(target) not in headings:
+                    out.append({
+                        "path": str(md),
+                        "line": i,
+                        "anchor": m.group(0),
+                    })
+    return out
+
+
 def check_backticked_wikilinks(md_files: list[Path], wiki_dir: Path) -> list[dict]:
     """Wiki-links trapped inside an inline-code span — `[[slug]]` — which
     Obsidian renders as literal text instead of resolving as a link. A silent
@@ -589,6 +625,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["overtagged"])
         + len(results["wikilink_collisions"])
         + len(results["backticked_links"])
+        + len(results["broken_anchors"])
     )
     suggestion_count = (
         len(results["log_gaps"])
@@ -725,6 +762,23 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             for entry in results["backticked_links"]:
                 lines.append(
                     f"- `{entry['path']}` line {entry['line']}: {entry['snippet']}"
+                )
+            lines.append("")
+
+        if results["broken_anchors"]:
+            lines.append(
+                f"### Broken in-page anchors — won't jump "
+                f"({len(results['broken_anchors'])})\n"
+            )
+            lines.append(
+                "A `[[#Section]]` link whose heading no longer exists on that "
+                "page. It names no page, so the dangling-link check cannot see "
+                "it — the link just silently goes nowhere. Fix the anchor or "
+                "restore the heading.\n"
+            )
+            for entry in results["broken_anchors"]:
+                lines.append(
+                    f"- `{entry['path']}` line {entry['line']}: {entry['anchor']}"
                 )
             lines.append("")
 
@@ -911,6 +965,7 @@ def main() -> int:
     # hand-written narrative prose where backticked real links matter too.
     backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
     backticked = check_backticked_wikilinks(backticked_files, wiki_dir)
+    broken_anchors = check_broken_anchors(backticked_files)
 
     results = {
         "broken_links": broken,
@@ -930,6 +985,7 @@ def main() -> int:
         "wikilink_collisions": wikilink_collisions,
         "schema_version": schema_version,
         "backticked_links": backticked,
+        "broken_anchors": broken_anchors,
     }
 
     report = render_report(
