@@ -157,7 +157,10 @@ def collect_links(md_path: Path, wiki_dir: Path) -> list[tuple[str, Path]]:
         out.append((url, resolved))
 
     for m in WIKILINK_PATTERN.finditer(text):
-        slug = m.group(1).strip()
+        slug = strip_heading_anchor(m.group(1).strip())
+        # Same-page heading/block anchor (`[[#Section]]`) — no page to resolve.
+        if slug is None:
+            continue
         # Attachment embed (`![[image.png]]`, `[[doc.pdf]]`): a file with an
         # extension, not a page. Resolve the literal filename across the vault
         # (wiki/ + raw/ + ...), don't append .md.
@@ -175,6 +178,22 @@ def collect_links(md_path: Path, wiki_dir: Path) -> list[tuple[str, Path]]:
     return out
 
 
+def strip_heading_anchor(slug: str) -> str | None:
+    """Reduce a wiki-link target to the page it names.
+
+    Obsidian links can address a heading or block as well as a page:
+    `[[page#Section]]`, `[[page#^block-id]]`, and — within the same file —
+    `[[#Section]]`. Only the part before `#` is a filename.
+
+    Returns the page slug, or None when the link is a *same-page* anchor and
+    therefore names no page at all. Without this, `[[#Section]]` is reported as
+    a dangling link to a page literally named "#Section".
+    """
+    if slug.startswith("#"):
+        return None
+    return slug.split("#", 1)[0].strip()
+
+
 def check_wikilink_collisions(md_files: list[Path], wiki_dir: Path) -> list[dict]:
     """
     Wiki-link slugs that resolve to more than one file under wiki/.
@@ -185,8 +204,8 @@ def check_wikilink_collisions(md_files: list[Path], wiki_dir: Path) -> list[dict
     for md in md_files:
         text = md.read_text(encoding="utf-8", errors="replace")
         for m in WIKILINK_PATTERN.finditer(text):
-            slug = m.group(1).strip()
-            if slug in seen:
+            slug = strip_heading_anchor(m.group(1).strip())
+            if slug is None or slug in seen:
                 continue
             matches = list(wiki_dir.rglob(f"{slug}.md"))
             if len(matches) > 1:
