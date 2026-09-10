@@ -905,7 +905,9 @@ def _quote_before(line: str, close_index: int) -> str | None:
     return None
 
 
-def check_transcript_citations(md_files: list[Path], root: Path) -> list[dict]:
+def check_transcript_citations(
+    md_files: list[Path], root: Path, min_drift: int = 1
+) -> list[dict]:
     """Timestamp citations pointing at the wrong cue of their transcript.
 
     A cue lasts about two seconds, so a quote's real start is often one or more
@@ -918,6 +920,12 @@ def check_transcript_citations(md_files: list[Path], root: Path) -> list[dict]:
     then asks where each quote's *first word* lives. A quote that legitimately
     begins mid-sentence cites the later cue, which is why the comparison is
     against the quote as written rather than against the surrounding sentence.
+
+    `min_drift` sets how far out a citation has to be before it is worth
+    reporting, in seconds. A cue is about two seconds long, so a drift of one
+    or two still lands the reader in the right sentence; raising the floor
+    keeps the list to citations that point somewhere genuinely different.
+    The default of 1 reports every drift.
 
     Repeated phrasing is handled rather than reported: when a quote's opening
     words occur at several points in the transcript, any of those cues is
@@ -1017,12 +1025,15 @@ def check_transcript_citations(md_files: list[Path], root: Path) -> list[dict]:
                     }
                     if extra & set(starts):
                         continue
+                drift = min(abs(cited - s) for s in starts)
+                if drift < min_drift:
+                    continue
                 out.append({
                     "path": str(md),
                     "line": lineno,
                     "cited": m.group("ts"),
                     "expected": [_format_seconds(s) for s in starts],
-                    "drift": min(abs(cited - s) for s in starts),
+                    "drift": drift,
                     "transcript": path.name,
                     "quote": " ".join(words[:8]),
                 })
@@ -1073,6 +1084,11 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
     lines.append(f"# Lint report\n")
     lines.append(f"Wiki root: `{root}`")
     lines.append(f"Date: {today}\n")
+    if thresholds.get("min_drift", 1) > 1:
+        lines.append(
+            f"Timestamp citations under **{thresholds['min_drift']}s** out are "
+            f"not listed (`--min-drift {thresholds['min_drift']}`).\n"
+        )
 
     block_count = (
         len(results["broken_links"])
@@ -1321,6 +1337,11 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
                 "the right sentence; a large drift points at a different topic "
                 "entirely, so work down from the top.\n"
             )
+            if thresholds.get("min_drift", 1) > 1:
+                lines.append(
+                    f"Filtered: only citations **{thresholds['min_drift']}s or "
+                    f"more** out are listed.\n"
+                )
             for entry in results["transcript_citations"]:
                 expected = " or ".join(entry["expected"])
                 lines.append(
@@ -1485,6 +1506,15 @@ def main() -> int:
         "--max-tags", type=int, default=4,
         help="Pages with more frontmatter tags than this are flagged (default: 4).",
     )
+    parser.add_argument(
+        "--min-drift", type=int, default=1,
+        help=(
+            "Timestamp citations less than this many seconds out are not "
+            "flagged (default: 1, i.e. report every drift). A cue runs about "
+            "two seconds, so 3-4 keeps the list to citations that land in a "
+            "different sentence."
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(args.path).expanduser().resolve()
@@ -1520,7 +1550,9 @@ def main() -> int:
     # index.md carries long-lived copies of source-page summaries, citations
     # included, so it is checked alongside the pages themselves.
     citation_files = [p for p in (backticked_files + [wiki_dir / "index.md"]) if p.exists()]
-    transcript_citations = check_transcript_citations(citation_files, root)
+    transcript_citations = check_transcript_citations(
+        citation_files, root, args.min_drift
+    )
     raw_frontmatter = check_raw_frontmatter(md_files, root)
 
     results = {
@@ -1554,6 +1586,7 @@ def main() -> int:
             "stub_words": args.stub_words,
             "log_gap_days": args.log_gap_days,
             "max_tags": args.max_tags,
+            "min_drift": args.min_drift,
         },
     )
 
