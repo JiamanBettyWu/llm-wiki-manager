@@ -4,13 +4,13 @@ Use this when the user wants to start a new wiki. The user said something like "
 
 ## Goal
 
-Get the user from zero to a working wiki in under five minutes, with `CLAUDE.md` written, `init_wiki.py` run, and (if they have a source ready) one source ingested. **Don't interrogate them up front** — bootstrap quickly, let conventions emerge.
+Get the user from zero to a working wiki in under five minutes, with `AGENTS.md` written, `init_wiki.py` run, and (if they have a source ready) one source ingested. **Don't interrogate them up front** — bootstrap quickly, let conventions emerge.
 
 ## The fast path (default)
 
 1. **Confirm the wiki root.** Default is the current working directory. Confirm with one line: "Bootstrap a wiki here? (`pwd`)" — proceed unless they say no.
 2. **Ask the topic in one sentence.** "What's this wiki about?" One sentence is enough. Don't ask about taxonomy yet — that emerges from the first few sources.
-3. **Run `init_wiki.py`.** This scaffolds the layout and writes a starter `CLAUDE.md`:
+3. **Run `init_wiki.py`.** This scaffolds the layout and writes a starter `AGENTS.md`:
 
    ```bash
    python scripts/init_wiki.py --path . --name "<wiki name>" --topic "<one-sentence topic>"
@@ -30,7 +30,8 @@ That's it for the fast path. Total interaction: one confirmation, one sentence, 
 
 ```
 .
-├── CLAUDE.md              # Wiki schema — see below
+├── AGENTS.md              # Wiki schema — see below
+├── CLAUDE.md              # Stub: one `@AGENTS.md` line, so Claude Code loads the schema
 ├── README.md              # Brief human-facing overview
 ├── raw/
 │   └── .gitkeep
@@ -50,7 +51,15 @@ That's it for the fast path. Total interaction: one confirmation, one sentence, 
         └── .gitkeep
 ```
 
-The starter `CLAUDE.md` (from `assets/templates/wiki-CLAUDE.md.tmpl`) declares the conventions a fresh wiki uses:
+### One schema, two filenames
+
+The schema lives in **`AGENTS.md`** — the vendor-neutral filename that coding agents converge on, so Claude Code, Codex and others read the same file. **`CLAUDE.md` is a stub** whose only content is a pointer and an `@AGENTS.md` import line, which makes Claude Code load the real schema automatically.
+
+**Always edit `AGENTS.md`.** The failure this prevents is an agent finding no file under its own preferred name and helpfully *re-rendering* the schema into one — leaving two copies that drift apart, each with its own tool's name and paths substituted in. `lint_wiki.py` flags that as a quality finding ("Two schema files") whenever `CLAUDE.md` exists and does not import `AGENTS.md`.
+
+**Existing wikis are unaffected.** A wiki whose schema is in `CLAUDE.md` keeps working — every script prefers `AGENTS.md` and falls back to `CLAUDE.md` — and `init_wiki.py` will not drop an `AGENTS.md` next to a real `CLAUDE.md` schema. To convert one, move the content to `AGENTS.md` and replace `CLAUDE.md` with the stub.
+
+The starter `AGENTS.md` (from `assets/templates/wiki-AGENTS.md.tmpl`) declares the conventions a fresh wiki uses:
 
 - Three layers (raw / wiki / schema)
 - Structural files: `wiki/index.md`, `wiki/log.md`, `wiki/hot.md`
@@ -68,7 +77,7 @@ These are starting defaults. The user changes them as conventions evolve.
 Some users want a brief setup conversation. If they signal that — "let's talk through the structure first", or they're new to the pattern — slow down and walk through:
 
 1. **Topic and scope.** What's this wiki for? What kinds of sources will go in it? How long is the project (a week, a month, a year)?
-2. **Categories.** The defaults (sources / entities / concepts / notes) are generic. Some wikis benefit from custom categories — e.g. a research wiki might want `papers / methods / findings / open-questions`. If the user has a clear picture, reflect it in `CLAUDE.md` before running `init_wiki.py` (or edit `CLAUDE.md` after).
+2. **Categories.** The defaults (sources / entities / concepts / notes) are generic. Some wikis benefit from custom categories — e.g. a research wiki might want `papers / methods / findings / open-questions`. If the user has a clear picture, reflect it in `AGENTS.md` before running `init_wiki.py` (or edit `AGENTS.md` after).
 3. **Naming.** Default is lowercase-with-hyphens for everything. If they want something else (like Obsidian-style `[[Wiki Links]]` with capitalized titles), settle it now and document.
 4. **Git.** Should the wiki be a git repo? Default yes — `git init` happens during bootstrap. Lets them version-control summaries and roll back bad LLM edits.
 
@@ -80,7 +89,7 @@ Common case: the user drops three PDFs and a markdown file in `raw/` (or pastes 
 
 1. Run the fast bootstrap.
 2. Switch to the **ingest workflow** (`references/ingest-workflow.md`) and process them one by one.
-3. After 2-3 sources, the natural taxonomy starts to show. **Update `CLAUDE.md`** with any conventions that have emerged (e.g. "every paper gets a `wiki/papers/` page with these sections…").
+3. After 2-3 sources, the natural taxonomy starts to show. **Update `AGENTS.md`** with any conventions that have emerged (e.g. "every paper gets a `wiki/papers/` page with these sections…").
 
 ## When `init_wiki.py` finds an existing wiki
 
@@ -90,7 +99,7 @@ If the user is moving an existing pile of markdown into the pattern, that's not 
 
 ## What "done" looks like
 
-- `CLAUDE.md` exists at the wiki root, customized with the topic and any agreed conventions.
+- `AGENTS.md` exists at the wiki root, customized with the topic and any agreed conventions.
 - `wiki/index.md` exists with category headers, possibly empty.
 - `wiki/log.md` has at least one entry: the bootstrap.
 - `wiki/hot.md` exists — will be rewritten after the first ingest.
@@ -103,5 +112,5 @@ If the bootstrap produced a wiki but the user is still confused about how to use
 
 - **Designing the taxonomy up front.** The defaults work. Customize when real pages start straining them, not before.
 - **Creating empty entity/concept pages "in case".** Pages should be created when a source motivates them. An empty page with three sections and no real content is a maintenance liability.
-- **Forgetting `CLAUDE.md`.** If the bootstrap skips writing the schema file, the next session has no idea what's going on. Always write it. Always use the template.
+- **Forgetting `AGENTS.md`.** If the bootstrap skips writing the schema file, the next session has no idea what's going on. Always write it. Always use the template.
 - **Mixing raw and wiki content in one folder.** The three-layer separation is load-bearing. Don't shortcut it.

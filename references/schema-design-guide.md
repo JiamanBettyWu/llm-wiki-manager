@@ -1,6 +1,6 @@
 # Schema Design Guide
 
-How to write the wiki's `CLAUDE.md` and how to evolve it. Read this when bootstrapping (you'll write the initial file from a template) or when conventions need updating mid-flight.
+How to write the wiki's `AGENTS.md` and how to evolve it. Read this when bootstrapping (you'll write the initial file from a template) or when conventions need updating mid-flight.
 
 The schema file is the single most important configuration in the system. It's what makes future LLM sessions disciplined wiki maintainers rather than generic chatbots that touched some markdown files.
 
@@ -10,7 +10,7 @@ At the wiki root, one level above `wiki/`:
 
 ```
 my-wiki/
-├── CLAUDE.md        ← here
+├── AGENTS.md        ← here
 ├── raw/
 └── wiki/
 ```
@@ -42,7 +42,7 @@ Restate the convention. Don't assume future Claude sessions know the pattern jus
 ## Layers
 - `raw/` — immutable sources. User-curated. Never modify.
 - `wiki/` — LLM-managed pages. Owned by Claude. User reads, doesn't write.
-- This file (`CLAUDE.md`) — the schema. Evolved over time when conventions change.
+- This file (`AGENTS.md`) — the schema. Evolved over time when conventions change.
 ```
 
 ### 3. Categories
@@ -134,14 +134,14 @@ A hub is **not a folder — it's a normal wiki page** that serves as a cluster's
 Tags are classifiers, not keywords. Without a policy they inflate fast (a real vault hit ~6 tags/page with mostly single-use tags). Write into the schema:
 
 - **Max 4 tags per page.** A tag must apply to **2+ pages** to enter frontmatter — single-use keywords belong in the page body.
-- **Canonical tag list lives in the wiki's `CLAUDE.md`** (not in hot.md). New tag = conscious decision: add to the list first, then use.
+- **Canonical tag list lives in the wiki's `AGENTS.md`** (not in hot.md). New tag = conscious decision: add to the list first, then use.
 - **Merge synonyms** (`setup`/`kurulum`, `api`/`api-reference`) — `lint_wiki.py` surfaces single-use tags and over-tagged pages as findings.
 
 ## How the schema evolves
 
 The schema is **not written once and frozen**. It evolves as the wiki grows and conventions emerge.
 
-Triggers to update `CLAUDE.md`:
+Triggers to update `AGENTS.md`:
 
 - **Convention drift detected during lint.** "Three pages now use `## Findings` and four use `## Key findings`. Pick one and write it down."
 - **A new pattern works well.** "We started doing `> [!warning] Sources disagree` callouts for contradictions. Should we make that the standard? If yes, write it in."
@@ -150,9 +150,9 @@ Triggers to update `CLAUDE.md`:
 
 Don't make the user do this manually. When you notice a convention emerging, propose the schema update inline:
 
-> I've noticed that the last four entity pages all have a "Notable mentions" section. Want me to add that as a standard section in `CLAUDE.md` so future entity pages include it consistently?
+> I've noticed that the last four entity pages all have a "Notable mentions" section. Want me to add that as a standard section in `AGENTS.md` so future entity pages include it consistently?
 
-## What not to put in CLAUDE.md
+## What not to put in AGENTS.md
 
 - **The pattern's philosophy.** That's in the skill's `philosophy.md`, not the wiki's schema. The wiki's schema is for *this wiki's* specifics.
 - **Exhaustive examples.** A schema file is reference material, not a tutorial. Link out to a sample page instead of inlining one.
@@ -167,7 +167,7 @@ A common failure: turning the schema into a kitchen sink of every preference the
 
 ## Starter template
 
-`assets/templates/wiki-CLAUDE.md.tmpl` is the file `init_wiki.py` writes on bootstrap. It contains:
+`assets/templates/wiki-AGENTS.md.tmpl` is the file `init_wiki.py` writes on bootstrap. It contains:
 
 - A purpose placeholder (filled from the bootstrap conversation)
 - The standard layers

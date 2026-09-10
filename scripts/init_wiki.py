@@ -12,7 +12,8 @@ Usage:
 
 Layout produced:
     <root>/
-    ├── CLAUDE.md          # schema, written from template (only if missing)
+    ├── AGENTS.md          # schema, written from template (only if missing)
+    ├── CLAUDE.md          # stub importing AGENTS.md (only if missing)
     ├── README.md          # human-facing overview (only if missing)
     ├── raw/.gitkeep
     └── wiki/
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +37,23 @@ from pathlib import Path
 # Path to the skill's templates directory, resolved relative to this script.
 SCRIPT_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = SCRIPT_DIR.parent / "assets" / "templates"
+
+# CLAUDE.md is a pointer, not a second schema: Claude Code follows the @-import
+# so the AGENTS.md content loads automatically, and there is only one file to edit.
+CLAUDE_STUB = """# CLAUDE.md
+
+Project guidance lives in [AGENTS.md](AGENTS.md) — the vendor-neutral source of
+truth read by all coding agents. The line below imports it so Claude Code loads
+the full content automatically; edit AGENTS.md, not this file.
+
+@AGENTS.md
+"""
+
+
+def imports_agents_md(claude_md: Path) -> bool:
+    """Stub test: does CLAUDE.md import AGENTS.md rather than carry the schema?"""
+    text = claude_md.read_text(encoding="utf-8", errors="replace")
+    return bool(re.search(r"^\s*@\.?/?AGENTS\.md\s*$", text, re.MULTILINE))
 
 
 def render_template(template_path: Path, replacements: dict[str, str]) -> str:
@@ -90,32 +109,40 @@ def init_wiki(root: Path, name: str, topic: str) -> tuple[list[str], list[str]]:
         for sub in ("sources", "entities", "concepts", "notes", "reports"):
             ensure_dir_with_gitkeep(wiki_dir / sub, created=created, skipped=skipped)
 
-    # CLAUDE.md (schema)
-    claude_template = TEMPLATES_DIR / "wiki-CLAUDE.md.tmpl"
-    if claude_template.exists():
-        content = render_template(
-            claude_template,
-            {"WIKI_NAME": name, "TOPIC": topic},
-        )
-        write_if_missing(root / "CLAUDE.md", content, created=created, skipped=skipped)
-    else:
-        # Fallback minimal schema if template is missing.
-        write_if_missing(
-            root / "CLAUDE.md",
-            f"# {name}\n\n## Purpose\n\n{topic}\n",
-            created=created, skipped=skipped,
-        )
+    # AGENTS.md (schema) + CLAUDE.md (stub that imports it).
+    # An existing wiki may carry its schema in CLAUDE.md under the old layout.
+    # Leave it alone: writing AGENTS.md from the template alongside a real
+    # CLAUDE.md schema would create the two-schema drift lint now flags.
+    legacy_schema = root / "CLAUDE.md"
+    legacy_is_schema = legacy_schema.exists() and not imports_agents_md(legacy_schema)
+
+    if not legacy_is_schema:
+        schema_template = None
+        for candidate in ("wiki-AGENTS.md.tmpl", "wiki-CLAUDE.md.tmpl"):
+            if (TEMPLATES_DIR / candidate).exists():
+                schema_template = TEMPLATES_DIR / candidate
+                break
+        if schema_template is not None:
+            content = render_template(
+                schema_template,
+                {"WIKI_NAME": name, "TOPIC": topic},
+            )
+        else:
+            # Fallback minimal schema if template is missing.
+            content = f"# {name}\n\n## Purpose\n\n{topic}\n"
+        write_if_missing(root / "AGENTS.md", content, created=created, skipped=skipped)
+        write_if_missing(root / "CLAUDE.md", CLAUDE_STUB, created=created, skipped=skipped)
 
     # README.md (human-facing)
     readme = (
         f"# {name}\n\n"
         f"{topic}\n\n"
-        "This is an LLM-managed wiki. The LLM (Claude) owns `wiki/`. "
-        "I curate sources in `raw/`. The schema is in `CLAUDE.md`.\n\n"
+        "This is an LLM-managed wiki. The agent owns `wiki/`. "
+        "I curate sources in `raw/`. The schema is in `AGENTS.md`.\n\n"
         "## Layout\n\n"
         "- `raw/` — source documents I've collected\n"
-        "- `wiki/` — LLM-generated pages\n"
-        "- `CLAUDE.md` — schema for the LLM\n"
+        "- `wiki/` — agent-generated pages\n"
+        "- `AGENTS.md` — schema for the agent (`CLAUDE.md` imports it)\n"
     )
     write_if_missing(root / "README.md", readme, created=created, skipped=skipped)
 
@@ -166,7 +193,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--name", default=None,
-        help="Wiki name. Used in CLAUDE.md and README.md.",
+        help="Wiki name. Used in AGENTS.md and README.md.",
     )
     parser.add_argument(
         "--topic", default=None,
@@ -181,7 +208,7 @@ def main() -> int:
     root = Path(args.path).expanduser().resolve()
 
     name = args.name or root.name
-    topic = args.topic or "<edit CLAUDE.md to describe this wiki>"
+    topic = args.topic or "<edit AGENTS.md to describe this wiki>"
 
     created, skipped = init_wiki(root, name, topic)
 
@@ -198,9 +225,9 @@ def main() -> int:
     print(f"\nWiki ready at: {root}")
     if created:
         print("Next steps:")
-        print("  1. Edit CLAUDE.md to refine the schema for your topic.")
+        print("  1. Edit AGENTS.md to refine the schema for your topic.")
         print("  2. Drop your first source into raw/.")
-        print("  3. Ask Claude to ingest it.")
+        print("  3. Ask your coding agent to ingest it.")
     else:
         print("Wiki was already fully scaffolded — no changes made.")
 

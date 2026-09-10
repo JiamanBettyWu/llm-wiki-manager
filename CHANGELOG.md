@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **`AGENTS.md` is now the schema filename; `CLAUDE.md` becomes a stub that imports it.** `AGENTS.md` is the vendor-neutral name coding agents converge on, so Claude Code, Codex and others read one file instead of each re-rendering the schema under its own name. `init_wiki.py` writes `AGENTS.md` plus a `CLAUDE.md` containing an `@AGENTS.md` import line.
+- `assets/templates/wiki-CLAUDE.md.tmpl` renamed to `wiki-AGENTS.md.tmpl` (`init_wiki.py` falls back to the old name if only that is present).
+
+### Added
+- Lint check **"Two schema files"** (quality tier): fires when `AGENTS.md` and `CLAUDE.md` both exist and `CLAUDE.md` does not import `AGENTS.md` — i.e. two schemas that will drift apart.
+
+### Backward compatibility
+- **Existing `CLAUDE.md`-only wikis are unaffected.** `lint_wiki.py` and `migrate_wiki.py` prefer `AGENTS.md` and fall back to `CLAUDE.md` for reading and for the `schema_version` stamp; `init_wiki.py` will not drop an `AGENTS.md` beside a real `CLAUDE.md` schema.
+
 ## [1.4.0] - 2026-06-10
 
 ### Added

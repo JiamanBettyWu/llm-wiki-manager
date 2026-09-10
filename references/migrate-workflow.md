@@ -1,6 +1,6 @@
 # Migrate Workflow
 
-Use this when a skill update changed the wiki's structural conventions and an existing wiki needs to move to the new schema. Triggers: "wiki güncelle", "upgrade wiki", "migrate wiki", "move the wiki to the new structure" — or the Step 0 schema-version check in any mode found the wiki behind (`schema_version` in the wiki's `CLAUDE.md` lower than the skill expects; unstamped wiki = v1).
+Use this when a skill update changed the wiki's structural conventions and an existing wiki needs to move to the new schema. Triggers: "wiki güncelle", "upgrade wiki", "migrate wiki", "move the wiki to the new structure" — or the Step 0 schema-version check in any mode found the wiki behind (`schema_version` in the wiki's `AGENTS.md` lower than the skill expects; unstamped wiki = v1).
 
 Migration has two halves: **mechanical steps** (`scripts/migrate_wiki.py` does them) and **semantic steps** (you do them, page by page, with user approval). The script's dry-run output lists both.
 
@@ -32,7 +32,7 @@ Mechanical steps for v1 → v2:
 
 - **Index dedupe** — one page = one entry; the first occurrence is kept, the rest dropped.
 - **hot.md → log.md** — dated `## [YYYY-MM-DD]` changelog blocks are moved to log.md (copy → verify → delete; headings without `action | title` form become `note |` entries).
-- **Stamp** — `schema_version: 2` written into `CLAUDE.md` frontmatter.
+- **Stamp** — `schema_version: 2` written into `AGENTS.md` frontmatter.
 
 The script never touches `raw/`, logs the run as `restructure`, and is idempotent — re-running at the current version is a no-op.
 
@@ -40,11 +40,11 @@ The script never touches `raw/`, logs the run as `restructure`, and is idempoten
 
 Work through these in order, showing the user a diff or summary before each write:
 
-1. **Tag consolidation.** Collect all frontmatter tags (lint's tag-health output is the inventory). Merge synonyms, demote single-use tags to body text, cut pages to ≤4 tags. Write the surviving canonical list into the wiki's `CLAUDE.md` tag-policy section.
+1. **Tag consolidation.** Collect all frontmatter tags (lint's tag-health output is the inventory). Merge synonyms, demote single-use tags to body text, cut pages to ≤4 tags. Write the surviving canonical list into the wiki's `AGENTS.md` tag-policy section.
 2. **Index v2 rewrite.** Regroup the index by theme/category (NOT by tag), one entry per page, format `- [Title](path.md) — one-line summary #tag`. Keep it short — the index is read on every query.
 3. **Hub election.** For each 3+ page cluster, elect the most encompassing page as hub: add a `## Pages in this cluster` section there (one line per member + short description) and mark the hub with `★` in the index.
 4. **Related footers.** Add `## Related` (2–5 links + one-line why) to wiki pages, starting with the most-linked ones. No `related:` frontmatter field — the footer is the single source of truth.
-5. **Schema update.** Make sure the wiki's `CLAUDE.md` reflects the new conventions (tag policy, hub rule, index rule — copy the blocks from `assets/templates/wiki-CLAUDE.md.tmpl` and adapt).
+5. **Schema update.** Make sure the wiki's `AGENTS.md` reflects the new conventions (tag policy, hub rule, index rule — copy the blocks from `assets/templates/wiki-AGENTS.md.tmpl` and adapt).
 
 Steps 1–4 can be spread over multiple sessions; the stamp is already at the new version, so lint findings (not the version check) track the remaining semantic debt.
 
@@ -68,7 +68,7 @@ Three to six lines: what moved, what was merged, what's left (if the semantic st
 - **Never skip the dry-run.** It's the user's approval surface.
 - **Mechanical before semantic.** The script's output (deduped index, clean hot) is the foundation the semantic steps build on.
 - **Don't do semantic steps silently.** Each one rewrites user-visible structure; show diffs.
-- **Respect the Lint exceptions section** in the wiki's `CLAUDE.md` — consciously ignored findings stay ignored during migration too.
+- **Respect the Lint exceptions section** in the wiki's `AGENTS.md` — consciously ignored findings stay ignored during migration too.
 
 ## Common mistakes
 

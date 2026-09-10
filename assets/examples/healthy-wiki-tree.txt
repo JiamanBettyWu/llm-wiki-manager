@@ -3,7 +3,8 @@ A mature LLM wiki — ~50 sources, food-and-nutrition topic, 8 months old.
 The shape is what matters: most pages have 2-5 inbound links, the index reflects every page, the log has hundreds of entries, contradictions are flagged on concept pages, the schema has been touched 4-5 times since bootstrap.
 
 .
-├── CLAUDE.md                                # 80 lines, ~5 revisions since bootstrap
+├── AGENTS.md                                # 80 lines, ~5 revisions since bootstrap
+├── CLAUDE.md                                # stub: one `@AGENTS.md` import line
 ├── README.md                                # human-facing overview
 ├── raw/                                     # 53 sources
 │   ├── 2008-pollan-in-defense-of-food.pdf
@@ -17,7 +18,7 @@ The shape is what matters: most pages have 2-5 inbound links, the index reflects
 │   └── assets/                              # images that some sources reference
 │       └── ...
 └── wiki/
-    ├── CLAUDE.md.bak                        # NOT here — schema lives at root
+    ├── AGENTS.md.bak                        # NOT here — schema lives at root
     ├── index.md                             # 200+ lines, all pages catalogued
     ├── log.md                               # 300+ entries, append-only
     ├── hot.md                               # ~500-word hot cache; rewritten after every ingest
@@ -81,4 +82,4 @@ What IS in this tree that beginners often omit:
 
 - hot.md — the ~500-word hot cache. Without it, cross-project linking has no fast entry point.
 - reports/ — separate from notes/; keeps automated lint artifacts out of user content.
-- CLAUDE.md at the root (not inside wiki/) — so every session starts from the schema.
+- AGENTS.md at the root (not inside wiki/) — so every session starts from the schema. CLAUDE.md is a stub importing it, so Claude Code loads the same file.

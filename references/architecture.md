@@ -21,7 +21,7 @@ What goes here:
 Conventions:
 
 - One file per source. If a source is huge (a 600-page book), split by chapter at most.
-- Filenames should sort usefully. A common pattern: `YYYY-MM-AUTHOR-short-title.ext` — e.g. `2026-04-pollan-eat-food.pdf`. The skill doesn't enforce this; document whatever convention the user picks in `CLAUDE.md`.
+- Filenames should sort usefully. A common pattern: `YYYY-MM-AUTHOR-short-title.ext` — e.g. `2026-04-pollan-eat-food.pdf`. The skill doesn't enforce this; document whatever convention the user picks in `AGENTS.md`.
 - The LLM **never modifies files in `raw/`**. If the source has a typo, leave it. If the markdown rendering is ugly, leave it. The LLM's job is to summarize and integrate elsewhere.
 
 ### Layer 2 — `wiki/`: the LLM-managed knowledge base
@@ -47,15 +47,15 @@ Conventions:
 - **One topic per page.** If a page is doing two jobs, split it.
 - **Links over duplication.** If two pages need the same fact, write the fact once and link from the other page.
 - **Cite back to sources.** Every claim should be traceable. Use a "Sources" section at the bottom listing the `wiki/sources/` pages this page draws from.
-- **Frontmatter is optional but useful.** A page with `---\ntags: [book, philosophy]\nupdated: 2026-04-12\nsources: 4\n---` plays well with editors that read frontmatter (Dataview in Obsidian, etc.). Decide once, document in `CLAUDE.md`.
+- **Frontmatter is optional but useful.** A page with `---\ntags: [book, philosophy]\nupdated: 2026-04-12\nsources: 4\n---` plays well with editors that read frontmatter (Dataview in Obsidian, etc.). Decide once, document in `AGENTS.md`.
 
-### Layer 3 — `CLAUDE.md`: the schema
+### Layer 3 — `AGENTS.md`: the schema
 
 Lives at the wiki root (one level above `wiki/`). Tells the LLM how this particular wiki is organized.
 
-It is **not** generic — it is co-evolved with the user as conventions emerge. A research wiki's `CLAUDE.md` looks different from a fan-wiki `CLAUDE.md`. See `references/schema-design-guide.md` for what to include.
+It is **not** generic — it is co-evolved with the user as conventions emerge. A research wiki's `AGENTS.md` looks different from a fan-wiki `AGENTS.md`. See `references/schema-design-guide.md` for what to include.
 
-The single most important property: when a new convention works, it gets written into `CLAUDE.md` immediately. The next session starts informed.
+The single most important property: when a new convention works, it gets written into `AGENTS.md` immediately. The next session starts informed.
 
 ## Two structural files: index.md and log.md
 
@@ -144,4 +144,4 @@ Slugs only — lowercase, hyphenated, no spaces. `michael-pollan.md`, not `Micha
 
 For source files in `raw/`, the user picks the convention; the LLM follows it. The standard suggestion is `YYYY-MM-author-short-title.ext` but anything sortable works.
 
-For wiki pages, the slug is the title in lowercase-with-hyphens. Document in `CLAUDE.md` if a different scheme is chosen (e.g. some users like `2026-04-12-some-note.md` for journal-style notes).
+For wiki pages, the slug is the title in lowercase-with-hyphens. Document in `AGENTS.md` if a different scheme is chosen (e.g. some users like `2026-04-12-some-note.md` for journal-style notes).

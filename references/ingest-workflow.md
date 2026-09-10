@@ -35,7 +35,7 @@ Before producing pages, give a 4-6 line summary of what you saw and what you pla
 
 This 30-second checkpoint catches misdirected ingests early. The user might say "skip the USDA stuff, that's not relevant to this wiki" or "actually focus on the supplements chapter". Cheap to ask, expensive to redo.
 
-If the user has set up the wiki for batch-ingest with low supervision, skip this step. Note it in `CLAUDE.md` if so.
+If the user has set up the wiki for batch-ingest with low supervision, skip this step. Note it in `AGENTS.md` if so.
 
 ### 4. Write the source summary
 
@@ -71,11 +71,11 @@ See [Nutritionism](../concepts/nutritionism.md) for Pollan's coined term.
 This contradicts [USDA's 1992 pyramid](../entities/usda.md#1992-food-pyramid).
 ```
 
-If the wiki is set up for Obsidian-style `[[wikilinks]]`, use those — check `CLAUDE.md`.
+If the wiki is set up for Obsidian-style `[[wikilinks]]`, use those — check `AGENTS.md`.
 
 **Maintain the `## Related` footer.** Every page ends with a `## Related` section: 2–5 links, each with a one-line *why* (`- [Page](path.md) — same program, parallel track`). When this ingest creates a meaningful connection between two pages, add it to both pages' Related footers. Don't mirror the links into a `related:` frontmatter field — the footer is the single source of truth.
 
-**Hub bookkeeping.** If a topic cluster reaches 3+ pages with this ingest, elect its most encompassing page as the hub: add a `## Pages in this cluster` section there, and mark it with `★` in the index (see `CLAUDE.md` hub rules).
+**Hub bookkeeping.** If a topic cluster reaches 3+ pages with this ingest, elect its most encompassing page as the hub: add a `## Pages in this cluster` section there, and mark it with `★` in the index (see `AGENTS.md` hub rules).
 
 ### 7. Flag contradictions
 
@@ -130,9 +130,9 @@ If the wiki has a `hot.md` (at `wiki/hot.md` or at the wiki root), **rewrite it 
 - **Last ingest:** ONLY the most recent 1-2 operations; everything older lives in log.md. Never accumulate dated `## [...]` blocks here — those are log entries.
 - **Active themes:** one line per theme + link to its hub (`★`) page.
 - **Open items:** add anything surfaced during ingest (a gap in coverage, an open question, a follow-up source worth finding); remove resolved ones.
-- **Conventions:** 3-4 lines a cross-project reader must know; details live in CLAUDE.md.
+- **Conventions:** 3-4 lines a cross-project reader must know; details live in AGENTS.md.
 
-If this ingest introduced a new tag, add it to the **canonical tag list in `CLAUDE.md`** (if it fits the tag policy) — the tag inventory does NOT live in hot.md.
+If this ingest introduced a new tag, add it to the **canonical tag list in `AGENTS.md`** (if it fits the tag policy) — the tag inventory does NOT live in hot.md.
 
 Rewriting (not appending) is important: `hot.md` is a cache, not a log. Its job is to give a future session — or a cross-project reader — an instant orientation. An append-only `hot.md` becomes too long to serve that purpose; `lint_wiki.py` flags it when it bloats.
 
@@ -147,7 +147,7 @@ If the user is engaged and curious, offer follow-ups: "This source gestures at [
 - **Five to fifteen pages touched is normal** for a substantive source. Two pages touched usually means the integration was lazy. Twenty-five pages touched usually means the source got over-integrated and trivial mentions got their own pages.
 - **Source summary first, then ripple outward.** Write the source summary, then update pages it points to, then update the index, then log. Don't bounce around.
 - **Quote sparingly.** A wiki page is a synthesis, not a copy. Direct quotes are reserved for moments where the exact wording matters.
-- **Match the schema.** Read `CLAUDE.md` if there's any doubt about page structure, frontmatter, or category names. The schema is the authority.
+- **Match the schema.** Read `AGENTS.md` if there's any doubt about page structure, frontmatter, or category names. The schema is the authority.
 
 ## Common mistakes
 

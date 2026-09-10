@@ -79,13 +79,13 @@ The skill auto-detects which mode applies from natural language. No slash comman
 
 | Mode | Trigger examples | What happens |
 |---|---|---|
-| **Bootstrap** | "Set up a wiki", "start a knowledge base here" | Scaffolds `raw/`, `wiki/`, `CLAUDE.md` from templates |
+| **Bootstrap** | "Set up a wiki", "start a knowledge base here" | Scaffolds `raw/`, `wiki/`, `AGENTS.md` from templates |
 | **Ingest** | "Add this PDF to the wiki", "I just read X, file it" | Reads source → writes summary → updates entity/concept pages → indexes → logs |
 | **Query** | "What does the wiki say about X?", "Compare X and Y" | Reads index → candidate pages → synthesizes answer with citations → offers to file back |
 | **Update** | "Smith 2024 supersedes Keys 1980, update the wiki" | Semantic sweep across all pages → diff-before-write per page → single log entry |
 | **Lint** | "Health check the wiki", "anything broken?" | Runs `lint_wiki.py` → auto-saves `wiki/reports/lint-YYYY-MM-DD.md` → auto-tracks in index and log |
-| **Schema-evolve** | "We should always do X going forward" | Updates `CLAUDE.md` so future sessions inherit the convention |
-| **Multi-wiki** | "Add this to my global wiki", "promote this page to global" | Routes between project wiki and global wiki using the `External Wiki:` declaration in project `CLAUDE.md` |
+| **Schema-evolve** | "We should always do X going forward" | Updates `AGENTS.md` so future sessions inherit the convention |
+| **Multi-wiki** | "Add this to my global wiki", "promote this page to global" | Routes between project wiki and global wiki using the `External Wiki:` declaration in project `AGENTS.md` |
 | **Teach** | "How does this pattern work?", "explain the LLM wiki idea" | Explains the pattern, compares with RAG, walks through a concrete example |
 
 ### Full walkthrough
@@ -116,7 +116,8 @@ cp ~/Downloads/pollan-2008.pdf raw/
 
 ```
 your-wiki/
-├── CLAUDE.md          # Schema — conventions for this wiki (co-evolved over time)
+├── AGENTS.md          # Schema — conventions for this wiki (vendor-neutral)
+├── CLAUDE.md          # Stub: one `@AGENTS.md` import line
 ├── raw/               # YOUR layer — immutable sources you curate. LLM reads, never writes.
 └── wiki/              # LLM layer — all pages written and maintained by the LLM
     ├── index.md       # Content catalog (updated on every ingest)
@@ -151,7 +152,7 @@ You almost never write wiki pages by hand. The LLM does the bookkeeping — that
 4. **Cross-reference aggressively.** When a source mentions an entity that already has a page, update that page. Don't leave connections implicit.
 5. **Cite back to `raw/`.** Every claim is traceable to a specific source file.
 6. **Flag contradictions, don't overwrite.** New source disagrees with old claim? Both stay, marked with their source, with a `> [!warning] Sources disagree` callout.
-7. **Schema lives in `CLAUDE.md`.** When a convention works, write it down. The next session starts informed.
+7. **Schema lives in `AGENTS.md`.** When a convention works, write it down. The next session starts informed.
 
 ---
 
@@ -161,7 +162,7 @@ You almost never write wiki pages by hand. The LLM does the bookkeeping — that
 
 | Script | Purpose |
 |---|---|
-| `scripts/init_wiki.py` | Scaffold a new wiki — creates `raw/`, `wiki/`, `CLAUDE.md`, `index.md`, `log.md`, and `hot.md`. Idempotent. |
+| `scripts/init_wiki.py` | Scaffold a new wiki — creates `raw/`, `wiki/`, `AGENTS.md`, `index.md`, `log.md`, and `hot.md`. Idempotent. |
 | `scripts/append_log.py` | Append a `## [YYYY-MM-DD] action \| title` entry to `log.md`. Supports flexible log path detection. |
 | `scripts/update_index.py` | Add or update an entry under a category in `index.md`. Upserts by (category, title). Flexible index path detection. |
 | `scripts/lint_wiki.py` | Health check. Detects orphan pages and index drift in both standard markdown and Obsidian wiki-link (`[[...]]`) format. Default: writes `wiki/reports/lint-<today>.md` and auto-tracks. Run `--stdout` for terminal output. |
@@ -171,7 +172,7 @@ You almost never write wiki pages by hand. The LLM does the bookkeeping — that
 
 | Template | Used for |
 |---|---|
-| `wiki-CLAUDE.md.tmpl` | The schema file dropped into a fresh wiki |
+| `wiki-AGENTS.md.tmpl` | The schema file dropped into a fresh wiki |
 | `source-summary.md.tmpl` | One ingested source — claims, methodology, cross-links, open questions |
 | `entity-page.md.tmpl` | People, organizations, places, products |
 | `concept-page.md.tmpl` | Ideas, frameworks, theories, terms |
@@ -229,23 +230,23 @@ Override flags: `--stdout` (terminal, no tracking), `--no-track` (write file, sk
 
 ## Multi-wiki
 
-Most users start with one wiki. Once you have **two** — say, a per-project wiki at the working directory plus a long-lived global "second brain" (often an existing Obsidian vault) — the skill routes writes between them based on a single declaration in the project's `CLAUDE.md`.
+Most users start with one wiki. Once you have **two** — say, a per-project wiki at the working directory plus a long-lived global "second brain" (often an existing Obsidian vault) — the skill routes writes between them based on a single declaration in the project's `AGENTS.md`.
 
 ```
 ~/projects/x-project/          ← active project (current working directory)
-├── CLAUDE.md                  ← project schema — declares the global wiki path
+├── AGENTS.md                  ← project schema — declares the global wiki path
 ├── raw/                       ← project sources
 └── wiki/                      ← project wiki
 
 ~/Documents/obsidian/          ← global wiki (long-lived, exists across projects)
-├── CLAUDE.md                  ← global schema
+├── AGENTS.md                  ← global schema
 ├── raw/
 └── wiki/
 ```
 
 ### One-time setup
 
-Add this to the project's `CLAUDE.md` (or ask the agent to do it):
+Add this to the project's `AGENTS.md` (or ask the agent to do it):
 
 ```markdown
 ## External Wiki
@@ -267,7 +268,7 @@ Global knowledge base: ~/Documents/obsidian/
 
 | # | Scenario | Trigger | What the agent does |
 |---|---|---|---|
-| **A** | **Write to global** while in a project | "Add JWT refresh rotation to my global wiki" | Reads project `CLAUDE.md` → resolves global path → writes to global, project wiki untouched |
+| **A** | **Write to global** while in a project | "Add JWT refresh rotation to my global wiki" | Reads project `AGENTS.md` → resolves global path → writes to global, project wiki untouched |
 | **B** | **Pull from global** into a project | "What does the global wiki say about rate limiting? Apply it to /api/search" | Reads global pages → synthesizes recommendation → writes a project-specific page that **links** to the global one (never copies) |
 | **C** | **Promote** a page from project to global | "concepts/event-sourcing.md has matured, promote it" | Moves content to global → leaves a one-line redirect stub at the project path → updates both indexes and logs |
 | **D** | **Lint both** wikis at once | "Lint both wikis" | Runs `lint_wiki.py --path` against each → reads both reports → returns one summary |

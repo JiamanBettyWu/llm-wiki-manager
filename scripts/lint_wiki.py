@@ -449,16 +449,54 @@ def check_tag_health(
     return single_use, overtagged, unparsed
 
 
+def imports_agents_md(claude_md: Path) -> bool:
+    """Stub test: does CLAUDE.md import AGENTS.md rather than carry the schema?"""
+    text = claude_md.read_text(encoding="utf-8", errors="replace")
+    return bool(re.search(r"^\s*@\.?/?AGENTS\.md\s*$", text, re.MULTILINE))
+
+
+def schema_file(root: Path) -> Path:
+    """
+    The wiki's schema file. AGENTS.md is preferred (vendor-neutral, read by any
+    coding agent); CLAUDE.md is the legacy name and still works. Returns the
+    AGENTS.md path when neither exists, so callers creating one use the new name.
+    """
+    agents = root / "AGENTS.md"
+    if agents.exists():
+        return agents
+    legacy = root / "CLAUDE.md"
+    if legacy.exists():
+        return legacy
+    return agents
+
+
+def check_schema_split(root: Path) -> dict | None:
+    """
+    Both AGENTS.md and CLAUDE.md present, and CLAUDE.md is not a stub importing
+    AGENTS.md — i.e. two schema files that will drift apart. Returns a finding
+    dict, else None.
+    """
+    agents, legacy = root / "AGENTS.md", root / "CLAUDE.md"
+    if not (agents.exists() and legacy.exists()):
+        return None
+    if imports_agents_md(legacy):
+        return None
+    return {
+        "hint": "CLAUDE.md should become a stub that imports AGENTS.md "
+                "(a line reading `@AGENTS.md`) — see references/bootstrap-workflow.md",
+    }
+
+
 def check_schema_version(root: Path) -> dict | None:
     """
-    Compare the wiki CLAUDE.md's schema_version stamp against what this skill
+    Compare the wiki schema file's schema_version stamp against what this skill
     version expects. Unstamped wikis count as v1. Returns a finding dict when
     the wiki is behind, else None.
     """
-    claude_md = root / "CLAUDE.md"
+    schema_md = schema_file(root)
     current = 1
-    if claude_md.exists():
-        fm = parse_frontmatter(claude_md.read_text(encoding="utf-8", errors="replace"))
+    if schema_md.exists():
+        fm = parse_frontmatter(schema_md.read_text(encoding="utf-8", errors="replace"))
         if fm and str(fm.get("schema_version", "")).isdigit():
             current = int(fm["schema_version"])
     if current < EXPECTED_SCHEMA_VERSION:
@@ -626,6 +664,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["wikilink_collisions"])
         + len(results["backticked_links"])
         + len(results["broken_anchors"])
+        + (1 if results["schema_split"] else 0)
     )
     suggestion_count = (
         len(results["log_gaps"])
@@ -675,6 +714,15 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
     if not quality_count:
         lines.append("None. ✓\n")
     else:
+        if results["schema_split"]:
+            lines.append("### Two schema files (AGENTS.md and CLAUDE.md)\n")
+            lines.append(
+                "Both exist and `CLAUDE.md` does not import `AGENTS.md`, so the wiki "
+                "has two schemas that will drift apart. Keep the content in one file "
+                "and make the other a pointer.\n"
+            )
+            lines.append(f"- {results['schema_split']['hint']}")
+            lines.append("")
         if results["orphans"]:
             lines.append(f"### Orphan pages ({len(results['orphans'])})\n")
             lines.append("Pages with no inbound links from any other page or from the index.\n")
@@ -729,7 +777,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             )
             lines.append(
                 "Tags are classifiers, not keywords — trim to the canonical list "
-                "in CLAUDE.md.\n"
+                f"in {schema_file(root).name}.\n"
             )
             for t in results["overtagged"]:
                 lines.append(f"- `{t['path']}` ({t['count']} tags: {', '.join(t['tags'])})")
@@ -838,7 +886,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
     lines.append("---\n")
     lines.append("**Not checked here (LLM responsibility):** stale claims, ")
     lines.append("unflagged contradictions, missing pages on cross-cutting entities, ")
-    lines.append("schema drift between `CLAUDE.md` and actual practice.\n")
+    lines.append(f"schema drift between `{schema_file(root).name}` and actual practice.\n")
     return "\n".join(lines)
 
 
@@ -961,6 +1009,7 @@ def main() -> int:
     single_use_tags, overtagged, tag_unparsed = check_tag_health(md_files, args.max_tags)
     wikilink_collisions = check_wikilink_collisions(md_files, wiki_dir)
     schema_version = check_schema_version(root)
+    schema_split = check_schema_split(root)
     # hot.md is excluded from the structural checks (meta file), but it's
     # hand-written narrative prose where backticked real links matter too.
     backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
@@ -984,6 +1033,7 @@ def main() -> int:
         "tag_unparsed": tag_unparsed,
         "wikilink_collisions": wikilink_collisions,
         "schema_version": schema_version,
+        "schema_split": schema_split,
         "backticked_links": backticked,
         "broken_anchors": broken_anchors,
     }
@@ -999,7 +1049,8 @@ def main() -> int:
 
     block_total = len(broken) + len(raw_missing) + len(index_dead)
     quality_count = (
-        len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
+        (1 if schema_split else 0)
+        + len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
         + len(index_duplicates) + len(hot_health) + len(overtagged)
         + len(wikilink_collisions) + len(backticked)
     )

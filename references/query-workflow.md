@@ -22,7 +22,7 @@ If the index is large (hundreds of entries) and skimming is slow, use a search a
 grep -ri "<keyword>" wiki/ --include="*.md" -l
 ```
 
-For larger wikis (~100+ sources), consider a proper search tool like [qmd](https://github.com/tobi/qmd). Document the choice in `CLAUDE.md`.
+For larger wikis (~100+ sources), consider a proper search tool like [qmd](https://github.com/tobi/qmd). Document the choice in `AGENTS.md`.
 
 ### 2. Read the candidate pages
 
