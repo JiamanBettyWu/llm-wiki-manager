@@ -607,6 +607,283 @@ def check_broken_anchors(md_files: list[Path]) -> list[dict]:
     return out
 
 
+CUE_TIME_PATTERN = re.compile(
+    r"^\s*(\d{1,2}):(\d{2}):(\d{2})[.,](\d{1,3})\s*-->", re.MULTILINE
+)
+TRANSCRIPT_SUFFIXES = (".srt", ".vtt")
+# A timestamp citation, anchored on the quote's closing mark so the quote's
+# extent can be walked backwards from a known point. Optionally carries the
+# source page ([[slug]]) and the lecture (L3) the timestamp belongs to.
+CITATION_PATTERN = re.compile(
+    r"(?P<close>[\"”'])"
+    r"[\s.,;:]*[—–-]?\s*\(?\s*"
+    r"(?:see\s*)?(?:\[\[(?P<slug>[^\]|\\#]+)(?:\\?\|[^\]]*)?\]\]\s*)?"
+    r"(?:(?:L|Lecture\s*)(?P<lec>\d{1,2})\s*)?"
+    r"@?\s*"
+    r"(?P<ts>\d{1,2}:\d{2}(?::\d{2})?)"
+)
+LECTURE_HEADING_PATTERN = re.compile(r"^#{2,6}\s+L(\d{1,2})\s*[·:.—–-]")
+LECTURE_ENTRY_PATTERN = re.compile(r"^L(\d{1,2})\s*[·:.—–-]\s*(.+)$")
+
+
+def _timestamp_seconds(ts: str) -> int:
+    """`MM:SS` or `H:MM:SS` -> seconds. Cited timestamps use either form."""
+    parts = [int(p) for p in ts.split(":")]
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def _format_seconds(total: int) -> str:
+    """Render back in the shape the vault cites: MM:SS, or H:MM:SS past an hour."""
+    if total >= 3600:
+        return f"{total // 3600}:{(total % 3600) // 60:02d}:{total % 60:02d}"
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _normalize_words(text: str) -> list[str]:
+    """Comparable word list: markdown, LaTeX and punctuation dropped.
+
+    Quoted prose in the wiki carries emphasis (`**word**`), inline maths
+    (`$h_0$`) and smart quotes that the transcript never has, so both sides are
+    reduced to bare lowercase words before matching.
+    """
+    text = text.replace("’", "'").replace("‘", "'")
+    text = re.sub(r"\$[^$]*\$", " ", text)          # inline LaTeX
+    text = re.sub(r"<[^>]*>", " ", text)            # .vtt inline tags
+    text = re.sub(r"[*_`\\\[\]]", " ", text)        # markdown emphasis, wiki-link brackets
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).split()
+
+
+def parse_transcript(path: Path) -> list[tuple[int, str]]:
+    """A `.srt`/`.vtt` as `(cue_start_seconds, word)` pairs, in order.
+
+    Flattening to a word stream — rather than a list of cues — is what makes
+    the check possible: a quote routinely spans a cue boundary, so the question
+    "which cue does this quote start in?" is really "which cue does its first
+    *word* belong to?"
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    stream: list[tuple[int, str]] = []
+    matches = list(CUE_TIME_PATTERN.finditer(text))
+    for i, m in enumerate(matches):
+        start = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+        payload_start = text.find("\n", m.end())
+        if payload_start == -1:
+            continue
+        payload_end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        payload = text[payload_start:payload_end]
+        # Drop the trailing cue number that belongs to the next .srt block.
+        payload = re.sub(r"\n\s*\d+\s*$", "", payload)
+        for word in _normalize_words(payload):
+            stream.append((start, word))
+    return stream
+
+
+def resolve_raw_reference(raw_value: str, page: Path, root: Path) -> Path | None:
+    """A frontmatter `raw:` value as a real path, or None.
+
+    Re-anchors on the `raw/` segment rather than trusting the number of `../`
+    steps in front of it. Those are written by hand and are commonly off by a
+    level — a wrong count still reads as plausible — while `raw/` being a
+    top-level directory of the wiki is an invariant. The literal relative path
+    is tried first so a correctly written one keeps working, including for a
+    wiki that nests `raw/` somewhere unusual.
+    """
+    literal = (page.parent / raw_value).resolve()
+    if literal.exists():
+        try:
+            literal.relative_to(root.resolve())
+            return literal
+        except ValueError:
+            return None  # outside the wiki root; not ours to check
+    parts = Path(raw_value).parts
+    if "raw" in parts:
+        anchored = (root / Path(*parts[parts.index("raw"):])).resolve()
+        if anchored.exists():
+            return anchored
+    return None
+
+def transcripts_for_page(page: Path, root: Path) -> dict[int | None, Path]:
+    """Lecture number -> transcript file, from a page's own frontmatter.
+
+    Two shapes are supported, both degrading to `{}` rather than guessing:
+
+      * `raw:` naming a `.srt`/`.vtt` directly — a single-transcript page,
+        filed under key `None`.
+      * `raw:` plus a `lectures:` list of `L<n> · <Video title>` entries — a
+        module page accumulating several videos. Each title is resolved to
+        `<title>.<ext>` beside the `raw:` file, which is where the transcript
+        convention puts it.
+    """
+    text = page.read_text(encoding="utf-8", errors="replace")
+    meta = parse_frontmatter(text)
+    if not meta or not meta.get("raw"):
+        return {}
+    raw_value = meta["raw"]
+    if not isinstance(raw_value, str):
+        return {}
+    raw_path = resolve_raw_reference(raw_value, page, root)
+    if raw_path is None:
+        return {}
+
+    lectures = meta.get("lectures")
+    if isinstance(lectures, list) and lectures:
+        out: dict[int | None, Path] = {}
+        for entry in lectures:
+            em = LECTURE_ENTRY_PATTERN.match(str(entry).strip())
+            if not em:
+                continue
+            title = em.group(2).strip()
+            for suffix in TRANSCRIPT_SUFFIXES:
+                candidate = raw_path.parent / f"{title}{suffix}"
+                if candidate.exists():
+                    out[int(em.group(1))] = candidate
+                    break
+        return out
+
+    if raw_path.suffix.lower() in TRANSCRIPT_SUFFIXES and raw_path.exists():
+        return {None: raw_path}
+    return {}
+
+
+def _quote_before(line: str, close_index: int) -> str | None:
+    """The quoted text ending at `close_index`, or None if no opener is found.
+
+    Walking backwards from the closing mark is what makes single-quoted
+    citations checkable: an apostrophe inside a quote (`Let's`) defeats any
+    forward scan, but the *closing* mark is pinned by the timestamp that
+    follows it.
+    """
+    close = line[close_index]
+    openers = {'"': '"“', "”": '"“', "'": "'‘"}[close]
+    i = close_index - 1
+    while i >= 0:
+        if line[i] in openers:
+            # For a straight apostrophe, only accept it as an opener when it
+            # starts a word — otherwise it is a possessive or a contraction.
+            if line[i] in "'‘" and i > 0 and (line[i - 1].isalnum()):
+                i -= 1
+                continue
+            return line[i + 1:close_index]
+        i -= 1
+    return None
+
+
+def check_transcript_citations(md_files: list[Path], root: Path) -> list[dict]:
+    """Timestamp citations pointing at the wrong cue of their transcript.
+
+    A cue lasts about two seconds, so a quote's real start is often one or more
+    cues before the memorable phrase inside it that was used to find it. Citing
+    the phrase's cue instead of the quote's puts the reader seconds — sometimes
+    tens of seconds — away from the words on the page, and the error is
+    invisible on re-reading: every wrong timestamp is still a valid cue.
+
+    The check flattens the transcript to a word stream tagged with cue starts,
+    then asks where each quote's *first word* lives. A quote that legitimately
+    begins mid-sentence cites the later cue, which is why the comparison is
+    against the quote as written rather than against the surrounding sentence.
+
+    Repeated phrasing is handled rather than reported: when a quote's opening
+    words occur at several points in the transcript, any of those cues is
+    accepted. Only the start is checked — an end time follows a quote that may
+    contain an ellipsis, and guessing there would cost more in false positives
+    than it returns.
+    """
+    out: list[dict] = []
+    page_cache: dict[Path, dict[int | None, Path]] = {}
+    stream_cache: dict[Path, list[tuple[int, str]]] = {}
+    by_slug = {p.stem: p for p in md_files}
+
+    def transcripts(page: Path) -> dict[int | None, Path]:
+        if page not in page_cache:
+            try:
+                page_cache[page] = transcripts_for_page(page, root)
+            except (OSError, ValueError):
+                page_cache[page] = {}
+        return page_cache[page]
+
+    def stream(path: Path) -> list[tuple[int, str]]:
+        if path not in stream_cache:
+            stream_cache[path] = parse_transcript(path)
+        return stream_cache[path]
+
+    for md in md_files:
+        own = transcripts(md)
+        text = md.read_text(encoding="utf-8", errors="replace")
+        section_lecture: int | None = None
+        in_code = False
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("```"):
+                in_code = not in_code
+                continue
+            if in_code:
+                continue
+            hm = LECTURE_HEADING_PATTERN.match(line)
+            if hm:
+                section_lecture = int(hm.group(1))
+            for m in CITATION_PATTERN.finditer(line):
+                # Which page's transcripts? An explicit [[slug]] wins; a page
+                # that declares its own is the fallback.
+                target = by_slug.get(m.group("slug")) if m.group("slug") else md
+                if target is None:
+                    continue
+                table = transcripts(target)
+                if not table:
+                    continue
+                # Which lecture? Explicit L<n>, else the enclosing `## L<n> ·`
+                # section, else the page's single transcript.
+                if m.group("lec"):
+                    key: int | None = int(m.group("lec"))
+                elif target is md and section_lecture is not None:
+                    key = section_lecture
+                elif len(table) == 1:
+                    key = next(iter(table))
+                else:
+                    continue  # ambiguous on a multi-lecture page; don't guess
+                path = table.get(key)
+                if path is None:
+                    continue
+                quote = _quote_before(line, m.start("close"))
+                if quote is None:
+                    continue
+                words = _normalize_words(quote)
+                if len(words) < 3:
+                    continue  # too short to locate reliably
+                toks = stream(path)
+                if not toks:
+                    continue
+                n = min(len(words), 8)
+                head = words[:n]
+                flat = [w for _, w in toks]
+                starts = sorted({
+                    toks[i][0] for i in range(len(flat) - n + 1)
+                    if flat[i:i + n] == head
+                })
+                if not starts:
+                    continue  # quote not found — a paraphrase in quote marks
+                cited = _timestamp_seconds(m.group("ts"))
+                if cited in starts:
+                    continue
+                out.append({
+                    "path": str(md),
+                    "line": lineno,
+                    "cited": m.group("ts"),
+                    "expected": [_format_seconds(s) for s in starts],
+                    "drift": min(abs(cited - s) for s in starts),
+                    "transcript": path.name,
+                    "quote": " ".join(words[:8]),
+                })
+    # Worst first. A citation one cue early still lands the reader in the right
+    # sentence; one half a minute out points at a different topic, and on a long
+    # list that is the difference worth seeing first.
+    out.sort(key=lambda e: -e["drift"])
+    return out
+
+
 def check_backticked_wikilinks(md_files: list[Path], wiki_dir: Path) -> list[dict]:
     """Wiki-links trapped inside an inline-code span — `[[slug]]` — which
     Obsidian renders as literal text instead of resolving as a link. A silent
@@ -664,6 +941,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["wikilink_collisions"])
         + len(results["backticked_links"])
         + len(results["broken_anchors"])
+        + len(results["transcript_citations"])
         + (1 if results["schema_split"] else 0)
     )
     suggestion_count = (
@@ -827,6 +1105,40 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             for entry in results["broken_anchors"]:
                 lines.append(
                     f"- `{entry['path']}` line {entry['line']}: {entry['anchor']}"
+                )
+            lines.append("")
+
+        if results["transcript_citations"]:
+            lines.append(
+                f"### Timestamp citations pointing at the wrong cue "
+                f"({len(results['transcript_citations'])})\n"
+            )
+            lines.append(
+                "The quoted words start in a different cue than the timestamp "
+                "names. This happens when a memorable phrase from the middle of "
+                "a quote is used to find the cue, and the quote is then written "
+                "out from an earlier sentence — the citation stays a valid "
+                "timestamp, so re-reading never catches it.\n"
+            )
+            lines.append(
+                "Cite the cue holding the quote's **first word**. A quote that "
+                "deliberately begins mid-sentence is right to cite the later "
+                "cue, so check the quote as written, not the sentence around "
+                "it. Where several cues are listed, the phrase recurs in the "
+                "transcript and any of them may be the one meant.\n"
+            )
+            lines.append(
+                "Listed worst first. One cue early still lands the reader in "
+                "the right sentence; a large drift points at a different topic "
+                "entirely, so work down from the top.\n"
+            )
+            for entry in results["transcript_citations"]:
+                expected = " or ".join(entry["expected"])
+                lines.append(
+                    f"- `{entry['path']}` line {entry['line']}: cited "
+                    f"`{entry['cited']}`, quote starts at `{expected}` "
+                    f"(**{entry['drift']}s** out) in {entry['transcript']} "
+                    f"— \"{entry['quote']}…\""
                 )
             lines.append("")
 
@@ -1015,6 +1327,10 @@ def main() -> int:
     backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
     backticked = check_backticked_wikilinks(backticked_files, wiki_dir)
     broken_anchors = check_broken_anchors(backticked_files)
+    # index.md carries long-lived copies of source-page summaries, citations
+    # included, so it is checked alongside the pages themselves.
+    citation_files = [p for p in (backticked_files + [wiki_dir / "index.md"]) if p.exists()]
+    transcript_citations = check_transcript_citations(citation_files, root)
 
     results = {
         "broken_links": broken,
@@ -1036,6 +1352,7 @@ def main() -> int:
         "schema_split": schema_split,
         "backticked_links": backticked,
         "broken_anchors": broken_anchors,
+        "transcript_citations": transcript_citations,
     }
 
     report = render_report(
