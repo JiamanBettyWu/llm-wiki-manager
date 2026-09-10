@@ -608,6 +608,101 @@ def check_broken_anchors(md_files: list[Path]) -> list[dict]:
     return out
 
 
+TABLE_DELIM_PATTERN = re.compile(r"^\s*\|?(?:\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$")
+FENCE_PATTERN = re.compile(r"^\s*(?:```|~~~)")
+# What may legitimately butt against a table, above and below. The two differ:
+# a table cannot interrupt a *paragraph*, and a list item's text is a paragraph,
+# so a bullet directly above swallows the table — while a bullet directly below
+# starts a new block and ends the table cleanly.
+TABLE_SAFE_ABOVE = re.compile(r"^\s*(?:#{1,6} |```|~~~|\||<)")
+TABLE_SAFE_BELOW = re.compile(r"^\s*(?:#{1,6} |>|```|~~~|[-*+] |\d+[.)] |\||<)")
+
+
+def check_table_rendering(md_files: list[Path]) -> list[dict]:
+    """Markdown tables written in a way the renderer won't turn into a table.
+
+    Three failures, all of which look correct in the source and show up as a
+    row of literal pipes in the reader:
+
+    * **indented** — a table at a continuation indent inside a list item, or
+      behind a `>` blockquote marker. Nesting a table inside another block is
+      not portable; take the table out of the nesting (promote an over-long
+      bullet to its own subsection, or drop the `>` from the aside).
+    * **no blank line above** — a table header row cannot interrupt a
+      paragraph, so a table butted straight against the line above it is
+      absorbed into that paragraph.
+    * **no blank line below** — the table runs until a blank line or the start
+      of another block, so a plain paragraph on the very next line is eaten as
+      one more row.
+
+    A table is located by its delimiter row (`|---|---|`), which is what makes
+    a run of pipes a table in the first place; the header is the line above it.
+    Fenced code blocks are skipped, so documentation *showing* table syntax is
+    not flagged.
+
+    Returns a list of {"path", "line", "reason"} dicts, one per table.
+    """
+    out: list[dict] = []
+    bq_prefix = re.compile(r"^\s*(?:>\s?)+")
+
+    def strip_bq(text: str) -> str:
+        return bq_prefix.sub("", text)
+
+    for md in md_files:
+        lines = md.read_text(encoding="utf-8", errors="replace").splitlines()
+        in_fence = False
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if FENCE_PATTERN.match(strip_bq(line)):
+                in_fence = not in_fence
+                i += 1
+                continue
+            if in_fence or i == 0:
+                i += 1
+                continue
+            # A delimiter row with a pipe-bearing line above it marks a table.
+            body = strip_bq(line)
+            if not (TABLE_DELIM_PATTERN.match(body) and "|" in body):
+                i += 1
+                continue
+            header_idx = i - 1
+            header = lines[header_idx]
+            if "|" not in strip_bq(header):
+                i += 1
+                continue
+
+            reasons: list[str] = []
+            in_blockquote = bool(bq_prefix.match(header)) and ">" in header
+            indent = len(header) - len(header.lstrip())
+            if in_blockquote:
+                reasons.append("inside a blockquote")
+            elif indent:
+                reasons.append(f"indented {indent} spaces, inside a list item")
+
+            above = lines[header_idx - 1] if header_idx > 0 else ""
+            if above.strip() and not TABLE_SAFE_ABOVE.match(strip_bq(above)):
+                reasons.append("no blank line above")
+
+            # Walk to the end of the table body.
+            end = i + 1
+            while end < len(lines) and lines[end].strip() and "|" in strip_bq(lines[end]):
+                end += 1
+            if end < len(lines):
+                below = lines[end]
+                if below.strip() and not TABLE_SAFE_BELOW.match(strip_bq(below)):
+                    reasons.append("no blank line below")
+
+            if reasons:
+                out.append({
+                    "path": str(md),
+                    "line": header_idx + 1,
+                    "reason": "; ".join(reasons),
+                })
+            i = end
+    return out
+
+
 CUE_TIME_PATTERN = re.compile(
     r"^\s*(\d{1,2}):(\d{2}):(\d{2})[.,](\d{1,3})\s*-->", re.MULTILINE
 )
@@ -995,6 +1090,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["wikilink_collisions"])
         + len(results["backticked_links"])
         + len(results["broken_anchors"])
+        + len(results["table_rendering"])
         + len(results["transcript_citations"])
         + len(results["raw_frontmatter"])
         + (1 if results["schema_split"] else 0)
@@ -1160,6 +1256,27 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             for entry in results["broken_anchors"]:
                 lines.append(
                     f"- `{entry['path']}` line {entry['line']}: {entry['anchor']}"
+                )
+            lines.append("")
+
+        if results["table_rendering"]:
+            lines.append(
+                f"### Tables that won't render "
+                f"({len(results['table_rendering'])})\n"
+            )
+            lines.append(
+                "A table the reader shows as a row of literal pipes. Nesting is "
+                "the usual cause — a table at a continuation indent inside a "
+                "list item, or behind a `>` blockquote marker — and the fix is "
+                "to take the table out of the nesting (promote an over-long "
+                "bullet to its own subsection; drop the `>` and let a leading "
+                "emoji carry the aside). The other cause is a missing blank "
+                "line: a table cannot interrupt a paragraph above it, and it "
+                "swallows a paragraph butted against it below.\n"
+            )
+            for entry in results["table_rendering"]:
+                lines.append(
+                    f"- `{entry['path']}` line {entry['line']}: {entry['reason']}"
                 )
             lines.append("")
 
@@ -1399,6 +1516,7 @@ def main() -> int:
     backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
     backticked = check_backticked_wikilinks(backticked_files, wiki_dir)
     broken_anchors = check_broken_anchors(backticked_files)
+    table_rendering = check_table_rendering(backticked_files)
     # index.md carries long-lived copies of source-page summaries, citations
     # included, so it is checked alongside the pages themselves.
     citation_files = [p for p in (backticked_files + [wiki_dir / "index.md"]) if p.exists()]
@@ -1425,6 +1543,7 @@ def main() -> int:
         "schema_split": schema_split,
         "backticked_links": backticked,
         "broken_anchors": broken_anchors,
+        "table_rendering": table_rendering,
         "transcript_citations": transcript_citations,
         "raw_frontmatter": raw_frontmatter,
     }
@@ -1444,6 +1563,8 @@ def main() -> int:
         + len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
         + len(index_duplicates) + len(hot_health) + len(overtagged)
         + len(wikilink_collisions) + len(backticked)
+        + len(broken_anchors) + len(table_rendering)
+        + len(transcript_citations) + len(raw_frontmatter)
     )
     suggestion_count = (
         len(log_gaps) + len(single_use_tags) + (1 if schema_version else 0)
