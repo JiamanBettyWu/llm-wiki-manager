@@ -622,6 +622,8 @@ CITATION_PATTERN = re.compile(
     r"(?:(?:L|Lecture\s*)(?P<lec>\d{1,2})\s*)?"
     r"@?\s*"
     r"(?P<ts>\d{1,2}:\d{2}(?::\d{2})?)"
+    r"(?:\s*[\u2013\u2014-]\s*(?P<ts_end>\d{1,2}:\d{2}(?::\d{2})?))?"
+    r"(?P<ts_more>(?:\s*,\s*\d{1,2}:\d{2}(?::\d{2})?)*)"
 )
 LECTURE_HEADING_PATTERN = re.compile(r"^#{2,6}\s+L(\d{1,2})\s*[·:.—–-]")
 LECTURE_ENTRY_PATTERN = re.compile(r"^L(\d{1,2})\s*[·:.—–-]\s*(.+)$")
@@ -903,6 +905,23 @@ def check_transcript_citations(md_files: list[Path], root: Path) -> list[dict]:
                 cited = _timestamp_seconds(m.group("ts"))
                 if cited in starts:
                     continue
+                # A range citation often covers several quotes at once — the
+                # span is the claim, and only the first quote sits at its start.
+                # Anything inside the span is cited correctly.
+                if m.group("ts_end"):
+                    end = _timestamp_seconds(m.group("ts_end"))
+                    if any(cited <= s <= end for s in starts):
+                        continue
+                # A comma-separated list gives one timestamp per quote in a
+                # sentence that quotes more than once; any of them may be this
+                # quote's.
+                if m.group("ts_more"):
+                    extra = {
+                        _timestamp_seconds(t)
+                        for t in re.findall(r"\d{1,2}:\d{2}(?::\d{2})?", m.group("ts_more"))
+                    }
+                    if extra & set(starts):
+                        continue
                 out.append({
                     "path": str(md),
                     "line": lineno,
