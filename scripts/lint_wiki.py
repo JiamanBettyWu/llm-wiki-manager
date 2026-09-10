@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import re
 import subprocess
 import sys
@@ -707,6 +708,40 @@ def resolve_raw_reference(raw_value: str, page: Path, root: Path) -> Path | None
             return anchored
     return None
 
+def check_raw_frontmatter(md_files: list[Path], root: Path) -> list[dict]:
+    """A page's `raw:` frontmatter pointing at a file that isn't there.
+
+    `raw:` is the pointer back to the source a page was made from, and it is a
+    relative path — so it depends on how deep the page sits. Moving a page one
+    level down (grouping a series into a subfolder) silently invalidates it
+    unless the `../` count is bumped to match, and because nothing in an
+    ordinary wiki *reads* `raw:`, a wrong one can sit unnoticed indefinitely.
+
+    Reported at quality tier, with the corrected path when the target can be
+    identified by re-anchoring on the `raw/` segment.
+    """
+    out: list[dict] = []
+    for md in md_files:
+        try:
+            meta = parse_frontmatter(md.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if not meta:
+            continue
+        value = meta.get("raw")
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if (md.parent / value).resolve().exists():
+            continue
+        resolved = resolve_raw_reference(value, md, root)
+        out.append({
+            "path": str(md),
+            "raw": value,
+            "fix": os.path.relpath(resolved, md.parent) if resolved else None,
+        })
+    return out
+
+
 def transcripts_for_page(page: Path, root: Path) -> dict[int | None, Path]:
     """Lecture number -> transcript file, from a page's own frontmatter.
 
@@ -942,6 +977,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["backticked_links"])
         + len(results["broken_anchors"])
         + len(results["transcript_citations"])
+        + len(results["raw_frontmatter"])
         + (1 if results["schema_split"] else 0)
     )
     suggestion_count = (
@@ -1106,6 +1142,23 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
                 lines.append(
                     f"- `{entry['path']}` line {entry['line']}: {entry['anchor']}"
                 )
+            lines.append("")
+
+        if results["raw_frontmatter"]:
+            lines.append(
+                f"### `raw:` frontmatter pointing at nothing "
+                f"({len(results['raw_frontmatter'])})\n"
+            )
+            lines.append(
+                "`raw:` is a relative path, so it depends on how deep its page "
+                "sits: move a page one level down — grouping a series into a "
+                "subfolder — and it needs one more `../`. Nothing in the wiki "
+                "reads `raw:`, so a stale one goes unnoticed until something "
+                "tries to follow it.\n"
+            )
+            for entry in results["raw_frontmatter"]:
+                fix = f" -> `{entry['fix']}`" if entry["fix"] else " (target not found)"
+                lines.append(f"- `{entry['path']}`: `{entry['raw']}`{fix}")
             lines.append("")
 
         if results["transcript_citations"]:
@@ -1331,6 +1384,7 @@ def main() -> int:
     # included, so it is checked alongside the pages themselves.
     citation_files = [p for p in (backticked_files + [wiki_dir / "index.md"]) if p.exists()]
     transcript_citations = check_transcript_citations(citation_files, root)
+    raw_frontmatter = check_raw_frontmatter(md_files, root)
 
     results = {
         "broken_links": broken,
@@ -1353,6 +1407,7 @@ def main() -> int:
         "backticked_links": backticked,
         "broken_anchors": broken_anchors,
         "transcript_citations": transcript_citations,
+        "raw_frontmatter": raw_frontmatter,
     }
 
     report = render_report(
