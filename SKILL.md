@@ -1,6 +1,6 @@
 ---
 name: llm-wiki-manager
-description: Build, maintain, and query a personal LLM-managed wiki — a markdown knowledge base where the LLM owns all writing, cross-referencing, and bookkeeping while the user curates sources. Use this skill when the user wants to (1) bootstrap a new wiki, second brain, or research notebook; (2) ingest a new source (article, PDF, paper, transcript) and update relevant entity/concept pages, the index, and log; (3) query an existing wiki and synthesize an answer with citations, filing it back if useful; (4) update the wiki when a new source supersedes a claim across multiple pages (diff-before-write sweep); (5) lint the wiki for orphan pages, broken links, index drift, or stub pages — auto-dated reports. Trigger this when the user mentions a "second brain", "research wiki", "knowledge base", or "Memex", or asks Claude to track sources across sessions. Bundles four idempotent scripts and enforces the bookkeeping discipline that makes wikis compound rather than rot.
+description: Build, maintain, and query a personal LLM-managed wiki — a markdown knowledge base where the LLM owns all writing, cross-referencing, and bookkeeping while the user curates sources. Use this skill when the user wants to (1) bootstrap a new wiki, second brain, or research notebook; (2) ingest a new source (article, PDF, paper, transcript) and update relevant entity/concept pages, the index, and log; (3) query an existing wiki and synthesize an answer with citations, filing it back if useful; (4) update the wiki when a new source supersedes a claim across multiple pages (diff-before-write sweep); (5) lint the wiki for orphan pages, broken links, index drift, or stub pages — auto-dated reports. Trigger this when the user mentions a "second brain", "research wiki", "knowledge base", or "Memex", or asks a coding agent to track sources across sessions. Bundles five idempotent scripts and enforces the bookkeeping discipline that makes wikis compound rather than rot.
 license: MIT
 metadata:
   author: sametbrr
@@ -18,7 +18,7 @@ metadata:
 
 A skill for running a personal LLM-managed wiki: a persistent, compounding markdown knowledge base where the human curates sources and asks questions, and the LLM does all the reading, writing, cross-referencing, and bookkeeping.
 
-The pattern is intentionally tool-agnostic — it's just markdown files in a git repo. It works in any editor (Obsidian, VS Code, plain `vim`), and the skill makes no assumptions beyond "you have a filesystem and git". The user is on Claude Code.
+The pattern is intentionally tool-agnostic — it's just markdown files in a git repo. It works in any editor (Obsidian, VS Code, plain `vim`), and the skill makes no assumptions beyond "you have a filesystem and git". It works with any coding agent that can read local skill instructions.
 
 ## The three layers (memorize this)
 

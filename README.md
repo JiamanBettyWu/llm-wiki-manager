@@ -4,7 +4,7 @@
 
 # LLM Wiki Manager
 
-A Claude Code skill for building and maintaining a personal LLM-managed wiki — a persistent, compounding knowledge base where the LLM does all the writing, cross-referencing, and bookkeeping while you curate sources and ask questions.
+A coding-agent skill for building and maintaining a personal LLM-managed wiki — a persistent, compounding knowledge base where the LLM does all the writing, cross-referencing, and bookkeeping while you curate sources and ask questions.
 
 > 🇹🇷 Türkçe için [README.tr.md](README.tr.md)
 
@@ -13,14 +13,14 @@ A Claude Code skill for building and maintaining a personal LLM-managed wiki —
 ## Quick Start
 
 ```bash
-git clone https://github.com/sametbrr/llm-wiki-manager ~/.claude/skills/llm-wiki-manager
+git clone https://github.com/sametbrr/llm-wiki-manager <your-agent-skill-directory>/llm-wiki-manager
 ```
 
-Start a new Claude Code session in your research folder:
+Start a new coding-agent session in your research folder:
 
 ```bash
-mkdir ~/research/my-topic && cd ~/research/my-topic && claude
-> "Set up an LLM wiki here. Topic: history of nutrition science."
+mkdir ~/research/my-topic && cd ~/research/my-topic
+# Ask your coding agent: "Set up an LLM wiki here. Topic: history of nutrition science."
 ```
 
 ---
@@ -29,7 +29,7 @@ mkdir ~/research/my-topic && cd ~/research/my-topic && claude
 
 Instead of RAG — where the LLM rediscovers answers from raw documents on every query — this pattern has the LLM **compile** raw sources into a persistent, interlinked markdown wiki. Each new source enriches existing pages. Cross-references are built eagerly. Contradictions are flagged. Knowledge compounds over time.
 
-Implements [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) as a full Claude Code skill with 8 operating modes (including multi-wiki routing), 5 idempotent Python scripts, 8 page templates, and 11 reference documents.
+Implements [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) as a coding-agent skill with 8 operating modes (including multi-wiki routing), 5 idempotent Python scripts, 8 page templates, and 11 reference documents.
 
 ```
 Without this pattern          With this pattern
@@ -43,7 +43,7 @@ Query 3 → re-read 50 docs     Query 3 → read updated wiki (contradictions al
 
 ## Requirements
 
-- Claude Code or any [agentskills.io](https://agentskills.io)-compatible agent
+- A coding agent that can load local skills (for example, Claude Code, Codex, or an [agentskills.io](https://agentskills.io)-compatible agent)
 - Python 3.9+ (stdlib only, for the 5 included scripts — no pip install needed)
 
 ---
@@ -52,7 +52,7 @@ Query 3 → re-read 50 docs     Query 3 → read updated wiki (contradictions al
 
 **Option 1 — git clone (recommended)**
 ```bash
-git clone https://github.com/sametbrr/llm-wiki-manager ~/.claude/skills/llm-wiki-manager
+git clone https://github.com/sametbrr/llm-wiki-manager <your-agent-skill-directory>/llm-wiki-manager
 ```
 
 **Option 2 — GitHub CLI** (requires gh CLI v2.90+)
@@ -64,10 +64,10 @@ gh skill install sametbrr/llm-wiki-manager
 ```bash
 curl -L -o llm-wiki-manager.skill \
   https://github.com/sametbrr/llm-wiki-manager/releases/latest/download/llm-wiki-manager.skill
-unzip llm-wiki-manager.skill -d ~/.claude/skills/llm-wiki-manager
+unzip llm-wiki-manager.skill -d <your-agent-skill-directory>/llm-wiki-manager
 ```
 
-After installing, start a new Claude Code session. The skill loads automatically when relevant.
+After installing, start a new session in your coding agent. The skill loads automatically when relevant if that agent supports automatic skill selection.
 
 ---
 
@@ -281,9 +281,9 @@ Full walkthroughs of all four scenarios in [`references/multi-wiki-routing.md`](
 
 | Tool | Skills path | Notes |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` or `.claude/skills/` | Global or project-level |
+| Claude Code | Agent-configured skill directory | Global or project-level; this machine symlinks it to the canonical checkout |
 | GitHub Copilot (VS Code) | `.vscode/skills/` | Agent mode required |
-| OpenAI Codex | `~/.codex/skills/` | Same SKILL.md format |
+| OpenAI Codex | Agent-configured skill directory | Same SKILL.md format; this machine uses the canonical checkout directly |
 | Cursor | `.cursor/skills/` | Project-level |
 | Gemini CLI | `~/.gemini/skills/` | |
 

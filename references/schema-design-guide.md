@@ -15,7 +15,7 @@ my-wiki/
 └── wiki/
 ```
 
-This way Claude Code automatically reads it on session start. If the user is on Codex or a different agent, the same file is named `AGENTS.md`. The contents are identical; only the filename differs.
+`AGENTS.md` is the vendor-neutral schema filename used by Codex and other compatible coding agents. For Claude Code, the initializer also creates a minimal `CLAUDE.md` stub that imports this file; there is still only one schema to maintain.
 
 ## What goes in it
 
@@ -36,12 +36,12 @@ This grounds every decision the LLM makes about what's relevant.
 
 ### 2. The three layers
 
-Restate the convention. Don't assume future Claude sessions know the pattern just from the directory structure.
+Restate the convention. Don't assume future coding-agent sessions know the pattern just from the directory structure.
 
 ```markdown
 ## Layers
 - `raw/` — immutable sources. User-curated. Never modify.
-- `wiki/` — LLM-managed pages. Owned by Claude. User reads, doesn't write.
+- `wiki/` — LLM-managed pages. Owned by the coding agent. User reads, doesn't write.
 - This file (`AGENTS.md`) — the schema. Evolved over time when conventions change.
 ```
 

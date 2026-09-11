@@ -4,7 +4,7 @@
 
 # LLM Wiki Manager
 
-Kişisel, LLM tarafından yönetilen bir wiki oluşturmak ve sürdürmek için Claude Code skill'i — LLM tüm yazma, çapraz referans ve kayıt tutma işlerini yaparken siz kaynakları seçip sorular sorarsınız.
+Kişisel, LLM tarafından yönetilen bir wiki oluşturmak ve sürdürmek için coding-agent skill'i — LLM tüm yazma, çapraz referans ve kayıt tutma işlerini yaparken siz kaynakları seçip sorular sorarsınız.
 
 > 🇬🇧 For English see [README.md](README.md)
 
@@ -13,14 +13,14 @@ Kişisel, LLM tarafından yönetilen bir wiki oluşturmak ve sürdürmek için C
 ## Hızlı Başlangıç
 
 ```bash
-git clone https://github.com/sametbrr/llm-wiki-manager ~/.claude/skills/llm-wiki-manager
+git clone https://github.com/sametbrr/llm-wiki-manager <agent-skill-dizininiz>/llm-wiki-manager
 ```
 
-Araştırma klasörünüzde yeni bir Claude Code oturumu başlatın:
+Araştırma klasörünüzde yeni bir coding-agent oturumu başlatın:
 
 ```bash
-mkdir ~/research/konum && cd ~/research/konum && claude
-> "Burada bir LLM wiki oluştur. Konu: beslenme bilimi tarihi."
+mkdir ~/research/konum && cd ~/research/konum
+# Coding agent'a sorun: "Burada bir LLM wiki oluştur. Konu: beslenme bilimi tarihi."
 ```
 
 ---
@@ -29,7 +29,7 @@ mkdir ~/research/konum && cd ~/research/konum && claude
 
 RAG'dan farklı olarak — LLM'nin her sorguda ham belgelerden cevap yeniden keşfettiği yaklaşım — bu pattern LLM'nin ham kaynakları kalıcı, birbiriyle bağlantılı bir markdown wiki'sine **derlemesini** sağlar. Her yeni kaynak mevcut sayfaları zenginleştirir. Çapraz referanslar hevesle kurulur. Çelişkiler işaretlenir. Bilgi zamanla birikerek büyür.
 
-[Karpathy'nin LLM Wiki pattern'ini](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 8 çalışma modu (çok-wiki yönlendirme dahil), 5 idempotent Python scripti, 8 sayfa şablonu ve 11 referans belgeyle tam bir Claude Code skill'i olarak uygular.
+[Karpathy'nin LLM Wiki pattern'ini](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 8 çalışma modu (çok-wiki yönlendirme dahil), 5 idempotent Python scripti, 8 sayfa şablonu ve 11 referans belgeyle tam bir coding-agent skill'i olarak uygular.
 
 ```
 Bu pattern olmadan          Bu pattern ile
@@ -43,7 +43,7 @@ Sorgu 3 → 50 belge yeniden okunur    Sorgu 3 → güncel wiki okunur (çelişk
 
 ## Gereksinimler
 
-- Claude Code veya herhangi bir [agentskills.io](https://agentskills.io) uyumlu agent
+- Claude Code, Codex veya yerel skill yükleyebilen herhangi bir [agentskills.io](https://agentskills.io) uyumlu agent
 - Python 3.9+ (yalnızca stdlib, dahil 5 script için — pip kurulumu gerekmez)
 
 ---
@@ -52,7 +52,7 @@ Sorgu 3 → 50 belge yeniden okunur    Sorgu 3 → güncel wiki okunur (çelişk
 
 **Seçenek 1 — git clone (önerilen)**
 ```bash
-git clone https://github.com/sametbrr/llm-wiki-manager ~/.claude/skills/llm-wiki-manager
+git clone https://github.com/sametbrr/llm-wiki-manager <agent-skill-dizininiz>/llm-wiki-manager
 ```
 
 **Seçenek 2 — GitHub CLI** (gh CLI v2.90+ gerektirir)
@@ -64,10 +64,10 @@ gh skill install sametbrr/llm-wiki-manager
 ```bash
 curl -L -o llm-wiki-manager.skill \
   https://github.com/sametbrr/llm-wiki-manager/releases/latest/download/llm-wiki-manager.skill
-unzip llm-wiki-manager.skill -d ~/.claude/skills/llm-wiki-manager
+unzip llm-wiki-manager.skill -d <agent-skill-dizininiz>/llm-wiki-manager
 ```
 
-Kurulumdan sonra yeni bir Claude Code oturumu başlatın. Skill ilgili olduğunda otomatik yüklenir.
+Kurulumdan sonra coding agent'ta yeni bir oturum başlatın. Agent otomatik skill seçimini destekliyorsa skill ilgili olduğunda yüklenir.
 
 ---
 
@@ -259,9 +259,9 @@ Global knowledge base: ~/Documents/obsidian/
 
 | Araç | Skills yolu | Notlar |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` veya `.claude/skills/` | Global veya proje düzeyinde |
+| Claude Code | Agent'ın yapılandırdığı skill dizini | Global veya proje düzeyinde |
 | GitHub Copilot (VS Code) | `.vscode/skills/` | Agent modu gerekli |
-| OpenAI Codex | `~/.codex/skills/` | Aynı SKILL.md formatı |
+| OpenAI Codex | Agent'ın yapılandırdığı skill dizini | Aynı SKILL.md formatı |
 | Cursor | `.cursor/skills/` | Proje düzeyinde |
 | Gemini CLI | `~/.gemini/skills/` | |
 
