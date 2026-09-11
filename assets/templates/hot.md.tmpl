@@ -7,28 +7,37 @@ updated: {{TODAY}}
 
 # Hot
 
-Hot cache — a ~500-word summary of recent ingests and currently active context. In cross-project link scenarios, other projects read this file first. **Rewrite entirely after every ingest** — do not append. Older content is findable via the index and log.
+Hot cache — ~500 words max, exactly the five sections below. In cross-project link scenarios, other projects read this file first. **Rewrite entirely after every ingest** — do not append. Dated changelog blocks belong in `log.md`, never here. The tag list lives in `AGENTS.md` (canonical tags), never here. Older content is findable via the index and log.
 
-## Vault state
+## State
 
-- Structure: [describe layout — flat `wiki/general/` + tags, or categorical `sources/entities/concepts/`]
-- Page count: **0 wiki** + **0 raw**. No ingests yet.
-- Main themes: [fill in after first few ingests]
+<!-- One paragraph: page count, layout (flat vs categorical), active policies. -->
 
-## Active knowledge (most recently learned)
+Wiki initialized {{TODAY}}. No ingests yet.
+
+## Last ingest
+
+<!-- ONLY the most recent 1-2 operations, one line each. Everything older lives in log.md. -->
 
 *No ingests yet.*
 
-## Vault-specific decisions
+## Active themes
 
-- Wiki initialized {{TODAY}}.
-- [Add structural decisions here as they emerge — e.g. "staying flat until 10+ pages", "using Obsidian wiki-links".]
+<!-- One line per theme + link to its hub page (★). Example:
+- Academic — [[auzef]] ★: program rules, two student projections
+-->
 
-## Open work items
+*No themes yet.*
+
+## Open items
+
+<!-- Short bullet list. Add items as they surface during ingest and lint; remove when done. -->
 
 - Drop the first source into `raw/` and ingest it.
-- [Add items as they surface during ingest and lint.]
 
-## Tag inventory (current)
+## Conventions
 
-*No tags yet.*
+<!-- 3-4 lines max: the decisions a cross-project reader must know.
+     Example: source routing, English-only policy, link style. Details live in AGENTS.md. -->
+
+- See `AGENTS.md` for schema, tag policy, and hub rules.

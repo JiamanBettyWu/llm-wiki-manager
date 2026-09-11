@@ -14,13 +14,15 @@ Answer the user's question using the wiki as the source of truth, citing wiki pa
 
 The index is the navigation aid. Don't grep blindly across `wiki/`. Read the index, identify candidate pages, then drill in. For most queries, two to five pages will be relevant.
 
+**Hub navigation:** if the index marks a page with `★`, that page is the cluster's hub (MOC) — it lists every page in its cluster with one-line descriptions. When the question falls inside a theme that has a hub, the cheapest route is **short index → hub → page**: read the theme's section of the index, open the hub, and jump straight to the right page instead of scanning the whole index or grepping.
+
 If the index is large (hundreds of entries) and skimming is slow, use a search approach:
 
 ```bash
 grep -ri "<keyword>" wiki/ --include="*.md" -l
 ```
 
-For larger wikis (~100+ sources), consider a proper search tool like [qmd](https://github.com/tobi/qmd). Document the choice in `CLAUDE.md`.
+For larger wikis (~100+ sources), consider a proper search tool like [qmd](https://github.com/tobi/qmd). Document the choice in `AGENTS.md`.
 
 ### 2. Read the candidate pages
 

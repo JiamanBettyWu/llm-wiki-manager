@@ -25,6 +25,8 @@ Useful flags:
 - `--no-track` — write the report file but skip the index/log updates.
 - `--stub-words 30` — change the threshold for stub detection (default 50).
 - `--log-gap-days 60` — change the threshold for log-gap warnings (default 30).
+- `--hot-max-words 900` — change the hot.md bloat threshold (default 700).
+- `--max-tags 5` — change the per-page frontmatter tag limit (default 4).
 
 The report is markdown, organized by severity (block / quality / suggestion). Past reports accumulate in `wiki/reports/`, giving you a longitudinal view of wiki health — "how was the wiki last month vs now". Git history of `wiki/reports/` is the audit trail.
 
@@ -36,7 +38,7 @@ The script can't see semantics. The LLM has to read the report and add:
 - **Unflagged contradictions** — pages where two cited sources clearly disagree but no "Disputes" section exists.
 - **Missing pages** — entities or concepts mentioned across multiple sources that don't have their own page yet.
 - **Over-thin pages** — pages that have one source citation and no synthesis. Often candidates for deletion or merge.
-- **Wiki schema drift** — `CLAUDE.md` says one convention, recent pages use another. Either update `CLAUDE.md` or fix the pages.
+- **Wiki schema drift** — `AGENTS.md` says one convention, recent pages use another. Either update `AGENTS.md` or fix the pages.
 
 To find these, skim recent source-summary pages and check whether their contents have actually been integrated upstream. Skim the index categories and check that they still match the actual contents.
 
@@ -93,16 +95,24 @@ The user will rarely ask for it on schedule. It's worth proactively suggesting a
 
 | Check | What it does | Severity |
 |---|---|---|
-| `broken_links` | Markdown links to non-existent files within the wiki | block |
+| `broken_links` | Markdown links **and `[[wiki-links]]`** to non-existent files within the wiki | block |
 | `index_missing` | Pages that exist but aren't in `wiki/index.md` (reads both `[markdown](links)` and `[[wiki-links]]` in the index) | quality |
 | `index_dead` | Index entries pointing to deleted files | block |
 | `orphans` | Pages with zero inbound links (checks both `[markdown](links)` and `[[wiki-links]]`) | quality |
 | `stub_pages` | Pages under ~50 words | quality |
 | `raw_missing` | Wiki pages citing `raw/` files that don't exist | block |
 | `log_gaps` | Stretches of >30 days with no log entry, in an otherwise active wiki | suggestion |
-| `slug_mismatch` | Filenames not conforming to `CLAUDE.md` slug convention | quality |
+| `slug_mismatch` | Filenames not conforming to `AGENTS.md` slug convention | quality |
+| `index_duplicates` | The same page listed more than once in the index (one page = one entry) | quality |
+| `hot_health` | `hot.md` over the word threshold or accumulating dated `## [...]` changelog blocks | quality |
+| `overtagged` | Pages with more frontmatter tags than the limit | quality |
+| `single_use_tags` | Tags appearing on exactly one page (keywords, not classifiers) | suggestion |
+| `wikilink_collisions` | `[[slugs]]` matching more than one file (silent ambiguity) | quality |
+| `schema_version` | Wiki's `schema_version` stamp behind what the skill expects — points to `migrate_wiki.py` | suggestion |
 
-The thresholds (50 words, 30 days) are tunable via flags — see `--help`.
+The thresholds (50 words, 30 days, 700 hot words, 4 tags) are tunable via flags — see `--help`.
+
+**Consciously ignored findings:** if the wiki's `AGENTS.md` has a "Lint exceptions" section, findings on the files/slugs listed there are expected — report them but don't propose fixes. When the user repeatedly dismisses the same finding, propose adding it to that section (schema-evolve).
 
 ## What the lint script does not catch
 
@@ -111,7 +121,7 @@ Anything semantic. The LLM is responsible for:
 - Stale claims
 - Unflagged contradictions
 - Missing pages on cross-cutting entities
-- Schema drift between `CLAUDE.md` and actual practice
+- Schema drift between `AGENTS.md` and actual practice
 - Pages that exist but say nothing useful
 
 These require reading the wiki. The lint script just gives you a starting point.

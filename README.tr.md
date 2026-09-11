@@ -29,7 +29,7 @@ mkdir ~/research/konum && cd ~/research/konum && claude
 
 RAG'dan farklı olarak — LLM'nin her sorguda ham belgelerden cevap yeniden keşfettiği yaklaşım — bu pattern LLM'nin ham kaynakları kalıcı, birbiriyle bağlantılı bir markdown wiki'sine **derlemesini** sağlar. Her yeni kaynak mevcut sayfaları zenginleştirir. Çapraz referanslar hevesle kurulur. Çelişkiler işaretlenir. Bilgi zamanla birikerek büyür.
 
-[Karpathy'nin LLM Wiki pattern'ini](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 8 çalışma modu (çok-wiki yönlendirme dahil), 4 idempotent Python scripti, 8 sayfa şablonu ve 9 referans belgeyle tam bir Claude Code skill'i olarak uygular.
+[Karpathy'nin LLM Wiki pattern'ini](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 8 çalışma modu (çok-wiki yönlendirme dahil), 5 idempotent Python scripti, 8 sayfa şablonu ve 11 referans belgeyle tam bir Claude Code skill'i olarak uygular.
 
 ```
 Bu pattern olmadan          Bu pattern ile
@@ -44,7 +44,7 @@ Sorgu 3 → 50 belge yeniden okunur    Sorgu 3 → güncel wiki okunur (çelişk
 ## Gereksinimler
 
 - Claude Code veya herhangi bir [agentskills.io](https://agentskills.io) uyumlu agent
-- Python 3.9+ (yalnızca stdlib, dahil 4 script için — pip kurulumu gerekmez)
+- Python 3.9+ (yalnızca stdlib, dahil 5 script için — pip kurulumu gerekmez)
 
 ---
 
@@ -79,13 +79,13 @@ Skill, doğal dilden hangi modun uygulanacağını otomatik olarak algılar. Sla
 
 | Mod | Tetikleyici örnekler | Ne olur |
 |---|---|---|
-| **Bootstrap** | "Wiki kur", "burada bir bilgi tabanı başlat" | `raw/`, `wiki/`, `CLAUDE.md`'yi şablonlardan oluşturur |
+| **Bootstrap** | "Wiki kur", "burada bir bilgi tabanı başlat" | `raw/`, `wiki/`, `AGENTS.md`'yi şablonlardan oluşturur |
 | **Ingest** | "Bu PDF'i wiki'ye ekle", "X'i az önce okudum, kaydet" | Kaynağı okur → özet yazar → varlık/kavram sayfalarını günceller → indeksler → loglar |
 | **Query** | "Wiki X hakkında ne diyor?", "X ile Y'yi karşılaştır" | İndeksi okur → aday sayfalar → alıntılı cevap sentezler → kaydetmeyi teklif eder |
 | **Update** | "Smith 2024, Keys 1980'in yerini aldı, wiki'yi güncelle" | Tüm sayfalarda semantik tarama → sayfa başına diff-before-write → tek log girişi |
 | **Lint** | "Wiki'yi kontrol et", "bir sorun var mı?" | `lint_wiki.py` çalıştırır → `wiki/reports/lint-YYYY-MM-DD.md` kaydeder → indeks ve log'a ekler |
-| **Schema-evolve** | "Bundan böyle her zaman X yapmalıyız" | `CLAUDE.md`'yi günceller, böylece gelecek oturumlar bu kuralı bilir |
-| **Multi-wiki** | "Bunu global wiki'me ekle", "global wiki hakkında ne diyor" | Proje `CLAUDE.md`'sindeki bildirgeye göre wiki'ler arasında yönlendirir |
+| **Schema-evolve** | "Bundan böyle her zaman X yapmalıyız" | `AGENTS.md`'yi günceller, böylece gelecek oturumlar bu kuralı bilir |
+| **Multi-wiki** | "Bunu global wiki'me ekle", "global wiki hakkında ne diyor" | Proje `AGENTS.md`'sindeki bildirgeye göre wiki'ler arasında yönlendirir |
 | **Teach** | "Bu pattern nasıl çalışıyor?", "LLM wiki fikrini açıkla" | Pattern'i açıklar, RAG ile karşılaştırır, somut bir örnek üzerinden anlatır |
 
 ### Tam adımlar
@@ -116,7 +116,8 @@ cp ~/Downloads/kitap-2008.pdf raw/
 
 ```
 your-wiki/
-├── CLAUDE.md          # Şema — bu wiki için kurallar (zamanla birlikte evrilir)
+├── AGENTS.md          # Şema — bu wiki için kurallar (zamanla birlikte evrilir)
+├── CLAUDE.md          # `@AGENTS.md`
 ├── raw/               # SİZİN katmanınız — değiştirilemez kaynaklar. LLM okur, asla yazmaz.
 └── wiki/              # LLM katmanı — tüm sayfalar LLM tarafından yazılır ve sürdürülür
     ├── index.md       # İçerik kataloğu (her içe aktarmada güncellenir)
@@ -151,7 +152,7 @@ Wiki sayfalarını neredeyse hiç elinizle yazmazsınız. LLM kayıt işlemlerin
 4. **Çapraz referansları agresif olarak kurun.** Bir kaynak zaten sayfası olan bir varlıktan bahsediyorsa o sayfayı güncelleyin. Bağlantıları örtük bırakmayın.
 5. **`raw/`'a atıfta bulunun.** Her iddia belirli bir kaynak dosyasına kadar izlenebilir olmalıdır.
 6. **Çelişkileri işaretleyin, üzerine yazmayın.** Yeni kaynak eski iddiaya katılmıyor mu? Her ikisi de kaynağıyla işaretli kalır, `> [!warning] Sources disagree` notuyla.
-7. **Şema `CLAUDE.md`'de yaşar.** Bir kural işe yarıyorsa yazın. Bir sonraki oturum bilgili başlar.
+7. **Şema `AGENTS.md`'de yaşar.** Bir kural işe yarıyorsa yazın. Bir sonraki oturum bilgili başlar.
 
 ---
 
@@ -161,16 +162,17 @@ Wiki sayfalarını neredeyse hiç elinizle yazmazsınız. LLM kayıt işlemlerin
 
 | Script | Amaç |
 |---|---|
-| `scripts/init_wiki.py` | Yeni bir wiki oluşturur — `raw/`, `wiki/`, `CLAUDE.md`, `index.md`, `log.md` ve `hot.md` oluşturur. İdempotent. |
+| `scripts/init_wiki.py` | Yeni bir wiki oluşturur — `raw/`, `wiki/`, `AGENTS.md`, `index.md`, `log.md` ve `hot.md` oluşturur. İdempotent. |
 | `scripts/append_log.py` | `log.md`'ye `## [YYYY-MM-DD] eylem \| başlık` girişi ekler. Esnek log yolu tespitini destekler. |
 | `scripts/update_index.py` | `index.md`'de bir kategori altına giriş ekler veya günceller. (kategori, başlık) çiftine göre upsert yapar. |
 | `scripts/lint_wiki.py` | Sağlık kontrolü. Hem standart markdown hem Obsidian wiki-link (`[[...]]`) formatında yetim sayfaları ve indeks kaymasını tespit eder. Varsayılan: `wiki/reports/lint-<bugün>.md` yazar ve otomatik takip eder. |
+| `scripts/migrate_wiki.py` | Şema yükseltme (v1 → v2). `index.md`'yi tekilleştirir, `hot.md`'deki tarihli changelog bloklarını `log.md`'ye taşır, şema sürümünü damgalar. İdempotent. |
 
 ### Şablonlar
 
 | Şablon | Kullanım yeri |
 |---|---|
-| `wiki-CLAUDE.md.tmpl` | Yeni wiki'ye düşürülen şema dosyası |
+| `wiki-AGENTS.md.tmpl` | Yeni wiki'ye düşürülen şema dosyası |
 | `source-summary.md.tmpl` | İçe aktarılan bir kaynak — iddialar, metodoloji, çapraz bağlantılar, açık sorular |
 | `entity-page.md.tmpl` | Kişiler, kuruluşlar, yerler, ürünler |
 | `concept-page.md.tmpl` | Fikirler, çerçeveler, teoriler, terimler |
@@ -181,8 +183,8 @@ Wiki sayfalarını neredeyse hiç elinizle yazmazsınız. LLM kayıt işlemlerin
 
 ### Referans Belgeler
 
-`references/` içinde dokuz ayrıntılı iş akışı belgesi:
-`philosophy.md` · `architecture.md` · `bootstrap-workflow.md` · `ingest-workflow.md` · `query-workflow.md` · `update-workflow.md` · `lint-workflow.md` · `schema-design-guide.md` · `multi-wiki-routing.md` · `teaching-mode.md`
+`references/` içinde on bir ayrıntılı iş akışı belgesi:
+`philosophy.md` · `architecture.md` · `bootstrap-workflow.md` · `ingest-workflow.md` · `query-workflow.md` · `update-workflow.md` · `lint-workflow.md` · `migrate-workflow.md` · `schema-design-guide.md` · `multi-wiki-routing.md` · `teaching-mode.md`
 
 Skill bunları seçici olarak okur — sizin okumanıza gerek yok. Her mod için LLM'e derinlik sağlamak amacıyla buradalar.
 
@@ -224,11 +226,11 @@ Override bayrakları: `--stdout` (terminal, takip yok), `--no-track` (dosya yaz,
 
 ## Çok-Wiki
 
-Çoğu kullanıcı tek bir wiki ile başlar. İki wiki'niz olduğunda — örneğin çalışma dizinindeki proje wikisi ve uzun vadeli bir "second brain" (genellikle mevcut bir Obsidian vault'u) — skill, proje `CLAUDE.md`'sindeki tek bir bildirgiye göre yazmaları aralarında yönlendirir.
+Çoğu kullanıcı tek bir wiki ile başlar. İki wiki'niz olduğunda — örneğin çalışma dizinindeki proje wikisi ve uzun vadeli bir "second brain" (genellikle mevcut bir Obsidian vault'u) — skill, proje `AGENTS.md`'sindeki tek bir bildirgiye göre yazmaları aralarında yönlendirir.
 
 ### Kurulum
 
-Proje `CLAUDE.md`'sine şunu ekleyin (veya agentten yapmasını isteyin):
+Proje `AGENTS.md`'sine şunu ekleyin (veya agentten yapmasını isteyin):
 
 ```markdown
 ## External Wiki
@@ -246,7 +248,7 @@ Global knowledge base: ~/Documents/obsidian/
 
 | # | Senaryo | Tetikleyici | Agent ne yapar |
 |---|---|---|---|
-| **A** | Projeden **global'e yaz** | "JWT refresh rotasyonunu global wiki'me ekle" | Proje `CLAUDE.md`'sini okur → global yolu çözer → global'e yazar |
+| **A** | Projeden **global'e yaz** | "JWT refresh rotasyonunu global wiki'me ekle" | Proje `AGENTS.md`'sini okur → global yolu çözer → global'e yazar |
 | **B** | Global'den **projeye çek** | "Global wiki rate limiting hakkında ne diyor? /api/search'e uygula" | Global sayfaları okur → öneri sentezler → global sayfaya bağlantı veren proje sayfası yazar |
 | **C** | Proje sayfasını global'e **tanıt** | "concepts/event-sourcing.md olgunlaştı, tanıt onu" | İçeriği global'e taşır → proje yolunda tek satırlık yönlendirme bırakır → her iki indeksi ve logu günceller |
 | **D** | Her iki wiki'yi **lint et** | "İki wiki'yi de lint et" | `lint_wiki.py --path` her birine karşı çalıştırır → tek özet döner |

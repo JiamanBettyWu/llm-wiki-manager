@@ -206,6 +206,23 @@ def main() -> int:
     category = normalize_category(args.category)
     text = index_path.read_text(encoding="utf-8")
     header, sections = parse_index(text)
+
+    # One page = one index entry: warn (but don't block) if the same page
+    # already lives under a different category — as a markdown link or a
+    # [[wikilink]] (matched by slug).
+    slug = Path(link).stem
+    needles = (f"]({link})", f"[[{slug}]]", f"[[{slug}|")
+    for other_cat, entry_lines in sections.items():
+        if other_cat == category:
+            continue
+        if any(n in line for line in entry_lines for n in needles):
+            print(
+                f"warning: {link} is already indexed under '{other_cat}' — "
+                "one page should have one index entry; remove the duplicate "
+                "unless it is intentional.",
+                file=sys.stderr,
+            )
+
     action = upsert_entry(sections, category, args.title, link, args.summary)
     new_text = render_index(header, sections)
     index_path.write_text(new_text, encoding="utf-8")

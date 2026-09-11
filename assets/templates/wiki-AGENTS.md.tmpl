@@ -1,7 +1,12 @@
+---
+schema_version: 2
+---
+
 # {{WIKI_NAME}}
 
 > A personal LLM-managed wiki using the [LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f). Maintained with the `llm-wiki-manager` skill.
 > The LLM (Claude) owns all writing in `wiki/`. The user owns `raw/`. This file is the schema.
+> `schema_version` tracks the structural conventions this wiki follows; `migrate_wiki.py` uses it to upgrade the wiki when the skill's conventions change. Do not edit by hand.
 
 ## Purpose
 
@@ -13,7 +18,7 @@
 
 - `raw/` — immutable sources, user-curated. Read but never modify.
 - `wiki/` — LLM-managed pages. Owned by Claude. The user reads, doesn't write.
-- `CLAUDE.md` (this file) — schema. Co-evolved with the user as conventions emerge.
+- `AGENTS.md` (this file) — schema, vendor-neutral and read by any coding agent. Co-evolved with the user as conventions emerge. `CLAUDE.md` is a stub that imports it — edit this file, not the stub.
 
 ## Structural files
 
@@ -40,6 +45,34 @@ Default layout. Adjust as the wiki grows.
 - **Wiki links:** standard markdown, relative paths. `[Title](../entities/title.md)`.
 - **Frontmatter:** optional. If used, keep keys consistent (`tags`, `updated`, `sources`).
 - **Citation style:** in-line as `(see [Source Title](../sources/source-slug.md))`.
+
+## Tag policy
+
+- Max **4 tags per page**. A tag must apply to **2+ pages** to enter frontmatter — single-use keywords belong in the page body, not in tags.
+- Canonical tag list (the only allowed frontmatter tags; extend deliberately, merge synonyms):
+  <!-- e.g.: setup, playbook, api, platform, reference, tutorial -->
+- New tag = conscious decision: add it here first, then use it. `lint_wiki.py` flags single-use tags and over-tagged pages.
+
+## Hub pages
+
+- A topic cluster with **3+ pages** elects its most encompassing page as the **hub** (a normal wiki page, not a folder — Obsidian calls this a MOC).
+- The hub carries a `## Pages in this cluster` section: one line per member page with a short description.
+- Mark hubs in the index with `★`. Query navigation: short index → hub → page.
+- Fewer than 3 pages = no hub yet; promote when the cluster grows.
+
+## Index rule
+
+- **One entry per page**, grouped by theme/category — a page never appears under multiple headings.
+- Entry format: `- [Title](path.md) — one-line summary #tag` (`★` after the link marks a hub).
+
+## Lint exceptions
+
+<!-- Findings the user has consciously decided to ignore. lint_wiki.py output on
+     these files/slugs is expected and should not be "fixed". Example:
+- raw/general/*-sitemap.md — large reference dumps, scanned only when their page updates
+-->
+
+*None yet.*
 
 ## External Wiki (optional)
 

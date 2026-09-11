@@ -4,7 +4,7 @@ Most users start with a single wiki at the working directory root. As soon as th
 
 This document covers:
 - The mental model (two wikis, one agent)
-- The one-time setup (declare the global wiki path in the project's `CLAUDE.md`)
+- The one-time setup (declare the global wiki path in the project's `AGENTS.md`)
 - Four canonical scenarios with the exact decisions the agent makes
 - Cross-wiki link rules (absolute paths, never relative)
 - Routing heuristics for "where does this go?"
@@ -15,23 +15,23 @@ This document covers:
 
 ```
 ~/projects/x-project/          ← active project (current working directory)
-├── CLAUDE.md                  ← project schema — declares the external wiki path
+├── AGENTS.md                  ← project schema — declares the external wiki path
 ├── raw/                       ← project sources
 └── wiki/                      ← project wiki
 
 ~/Documents/obsidian/          ← global wiki (long-lived, exists across projects)
-├── CLAUDE.md                  ← global schema
+├── AGENTS.md                  ← global schema
 ├── raw/
 └── wiki/
 ```
 
-The skill itself only knows one path at a time — whichever the user is currently inside. The trick is that the **project's `CLAUDE.md`** declares the global wiki's location. The agent reads project `CLAUDE.md` at session start, sees `External Wiki: ~/Documents/obsidian/`, and knows it has two valid write targets.
+The skill itself only knows one path at a time — whichever the user is currently inside. The trick is that the **project's `AGENTS.md`** declares the global wiki's location. The agent reads project `AGENTS.md` at session start, sees `External Wiki: ~/Documents/obsidian/`, and knows it has two valid write targets.
 
 ---
 
 ## One-time setup
 
-Add this section to the project's `CLAUDE.md`. Either tell the agent to do it ("add an External Wiki link to my CLAUDE.md pointing to ~/Documents/obsidian") or paste the template below directly:
+Add this section to the project's `AGENTS.md` (or `CLAUDE.md`, if that is where the project keeps its agent instructions). Either tell the agent to do it ("add an External Wiki link to my AGENTS.md pointing to ~/Documents/obsidian") or paste the template below directly:
 
 ```markdown
 ## External Wiki
@@ -51,7 +51,7 @@ Global knowledge base: ~/Documents/obsidian/
 
 After this, every session inherits the awareness. The user never has to repeat it.
 
-The global wiki's own `CLAUDE.md` does *not* need to know about specific projects. Projects are leaves; the global wiki is the trunk.
+The global wiki's own `AGENTS.md` does *not* need to know about specific projects. Projects are leaves; the global wiki is the trunk.
 
 ---
 
@@ -63,9 +63,9 @@ The global wiki's own `CLAUDE.md` does *not* need to know about specific project
 > "JWT refresh token rotation pattern: [explanation]. Add this to the global wiki."
 
 **What the agent reads (silently, before acting):**
-1. Project `CLAUDE.md` → finds `External Wiki: ~/Documents/obsidian/`
+1. Project `AGENTS.md` → finds `External Wiki: ~/Documents/obsidian/`
 2. `~/Documents/obsidian/wiki/index.md` → checks if a related page already exists
-3. `~/Documents/obsidian/CLAUDE.md` → loads global wiki's schema (slug style, frontmatter rules, citation conventions may differ from the project)
+3. `~/Documents/obsidian/AGENTS.md` → loads global wiki's schema (slug style, frontmatter rules, citation conventions may differ from the project)
 
 **What the agent shows (before writing):**
 ```
@@ -115,7 +115,7 @@ python3 ~/.claude/skills/llm-wiki-manager/scripts/append_log.py \
 > "Rate limiting for this project. What does the global wiki say, and how do we apply it to /api/search?"
 
 **What the agent does:**
-1. Reads project `CLAUDE.md` → finds external wiki path
+1. Reads project `AGENTS.md` → finds external wiki path
 2. Reads `~/Documents/obsidian/wiki/index.md` → finds `concepts/rate-limiting.md` and `sources/stripe-rate-limiting-2024.md`
 3. Reads those pages → synthesizes recommendation
 4. Considers project context (stack, traffic profile, existing infrastructure)
@@ -259,7 +259,7 @@ The lint scripts don't know about cross-wiki links — they only check links wit
 (see global wiki: concepts/event-sourcing)
 ```
 
-Add the rule explicitly to **both** the project `CLAUDE.md` and the global `CLAUDE.md`:
+Add the rule explicitly to **both** the project `AGENTS.md` and the global `AGENTS.md`:
 
 ```markdown
 ## Cross-wiki links
@@ -284,7 +284,7 @@ When the user adds new knowledge and doesn't specify the target wiki, ask if it'
 | External person or organization (paper author, vendor company) | Global wiki |
 | Both — project-specific use of a general pattern | **Both:** generic in global, project-specific in project, link from project → global |
 
-If the user has explicit routing rules in their project `CLAUDE.md`, those win. The defaults above only apply when no rule has been declared.
+If the user has explicit routing rules in their project `AGENTS.md`, those win. The defaults above only apply when no rule has been declared.
 
 ---
 
@@ -301,7 +301,7 @@ A single project wiki with everything inside is *not* worse than splitting prema
 
 ## Bootstrapping a multi-wiki setup
 
-If both wikis already exist (typical case): just add the `## External Wiki` section to the project's `CLAUDE.md` as shown above. No script needed.
+If both wikis already exist (typical case): just add the `## External Wiki` section to the project's `AGENTS.md` as shown above. No script needed.
 
 If only the project wiki exists and the user wants to start a global one:
 
@@ -311,7 +311,7 @@ mkdir ~/Documents/obsidian
 cd ~/Documents/obsidian
 python3 ~/.claude/skills/llm-wiki-manager/scripts/init_wiki.py .
 
-# 2. Back in the project, add the External Wiki link to the project CLAUDE.md
+# 2. Back in the project, add the External Wiki link to the project AGENTS.md
 #    (agent does this on request: "link this project to a global wiki at ~/Documents/obsidian")
 ```
 
@@ -321,7 +321,7 @@ The `init_wiki.py` script is the same in both cases — there's nothing global-s
 
 ## Summary
 
-- The skill knows one path at a time. The **project's `CLAUDE.md`** carries the link to the global wiki.
+- The skill knows one path at a time. The **project's `AGENTS.md`** carries the link to the global wiki.
 - Routing decision belongs to the user; defaults only apply when no rule is declared.
 - Cross-wiki links are **absolute paths** (`~/...`). Never relative across wiki boundaries.
 - Project pages **link** to global pages. They don't copy content. Links stay fresh; copies rot.
