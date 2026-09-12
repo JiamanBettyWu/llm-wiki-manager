@@ -858,6 +858,11 @@ def check_schema_paths(root: Path) -> list[dict]:
       real target beside the convenience path clears it. Naming only an
       *ancestor* of the target does not, since an ancestor doesn't say where
       the thing actually is.
+    * ``deadlink`` — a relative markdown link, resolved against the schema
+      file's own directory, pointing at a file that isn't there. A schema split
+      across several files (``AGENTS.md`` linking ``docs/*.md``) depends on
+      those links, and nothing else in the wiki reads them, so renaming a
+      linked file leaves a link that still looks perfectly right.
 
     Only backticked absolute paths (``/...`` or ``~/...``) are considered, and
     only outside fenced code blocks, so command examples and file templates are
@@ -901,6 +906,17 @@ def check_schema_paths(root: Path) -> list[dict]:
             out.append({"path": span, "kind": "missing", "real": None})
         elif real != path and real not in named:
             out.append({"path": span, "kind": "indirect", "real": real})
+
+    # Relative markdown links, resolved against the schema file's directory. A
+    # schema split into several files hangs together on these, and nothing else
+    # reads them, so a renamed target leaves a link that still looks right.
+    for target in re.findall(r"\]\(([^)\s]+)\)", text):
+        if re.match(r"^[a-z][a-z0-9+.-]*:", target) or target.startswith("#"):
+            continue  # external URL, or an in-page anchor
+        if target.startswith("/") or target.startswith("~"):
+            continue  # absolute: handled above
+        if not (schema_md.parent / target.split("#", 1)[0]).exists():
+            out.append({"path": target, "kind": "deadlink", "real": None})
     return out
 
 
@@ -1381,23 +1397,27 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
 
         if results["schema_paths"]:
             lines.append(
-                f"### Paths in the schema file that have moved "
+                f"### Paths and links in the schema file that no longer resolve "
                 f"({len(results['schema_paths'])})\n"
             )
             lines.append(
-                "The schema file names script and tool locations in prose and "
-                "nothing validates them, so when one moves the file goes on "
-                "asserting the old location. It stays quiet because a move "
-                "usually leaves a symlink behind: every documented command "
-                "still runs while the documented path is wrong. `missing` "
-                "means the path is not there at all. `via symlink` means it "
-                "resolves only by traversing a link, to a real location this "
-                "file never names — name the real path beside it to clear "
-                "the finding.\n"
+                "The schema file names script and tool locations in prose, and "
+                "links the other files a split schema is made of. Nothing else "
+                "validates either, so when one moves the file goes on asserting "
+                "the old location. It stays quiet because the stale version "
+                "usually still works — a move commonly leaves a symlink behind, "
+                "so every documented command runs while the documented path is "
+                "wrong. `missing` means the path is not there at all. `via "
+                "symlink` means it resolves only by traversing a link, to a real "
+                "location this file never names — name the real path beside it "
+                "to clear the finding. `linked file not found` means a relative "
+                "markdown link points at a file that isn't there.\n"
             )
             for entry in results["schema_paths"]:
                 if entry["kind"] == "missing":
                     lines.append(f"- `{entry['path']}` — missing")
+                elif entry["kind"] == "deadlink":
+                    lines.append(f"- `{entry['path']}` — linked file not found")
                 else:
                     lines.append(
                         f"- `{entry['path']}` — via symlink -> `{entry['real']}`"
