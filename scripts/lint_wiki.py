@@ -839,6 +839,71 @@ def check_raw_frontmatter(md_files: list[Path], root: Path) -> list[dict]:
     return out
 
 
+def check_schema_paths(root: Path) -> list[dict]:
+    """Absolute paths named in the schema file that have moved or gone away.
+
+    The schema file is the one page nothing else validates. It names script
+    locations, tool directories and config paths in prose, and when one of them
+    moves the file goes on asserting the old location. The failure is quiet
+    because the stale path usually still *works*: a move commonly leaves a
+    symlink behind, so every command in the file keeps running while the
+    documented location is wrong, and no amount of "does this work?" testing
+    finds it.
+
+    Two findings, both quality tier:
+
+    * ``missing``  — the path is not there at all.
+    * ``indirect`` — the path resolves, but only by traversing a symlink, and
+      the real location is never named anywhere in the schema file. Naming the
+      real target beside the convenience path clears it. Naming only an
+      *ancestor* of the target does not, since an ancestor doesn't say where
+      the thing actually is.
+
+    Only backticked absolute paths (``/...`` or ``~/...``) are considered, and
+    only outside fenced code blocks, so command examples and file templates are
+    exempt. Spans containing ``<``, ``>``, ``*`` or ``…`` are treated as
+    placeholders and skipped.
+
+    Caveat: on macOS ``/tmp`` is itself a symlink to ``/private/tmp``, so a
+    schema naming ``/tmp/...`` reports ``indirect`` unless it also names the
+    resolved path.
+    """
+    schema_md = schema_file(root)
+    if not schema_md.exists():
+        return []
+    text = re.sub(
+        r"```.*?```", "",
+        schema_md.read_text(encoding="utf-8", errors="replace"),
+        flags=re.S,
+    )
+
+    def expand(raw: str) -> str:
+        return os.path.abspath(os.path.expanduser(raw.rstrip(":,.").rstrip("/")))
+
+    candidates = [
+        span for span in re.findall(r"`([^`\n]+)`", text)
+        if (span.startswith("/") or span.startswith("~/"))
+        and not any(ch in span for ch in "<>*…")
+    ]
+    # Every absolute path the file names, so a symlink whose real target is
+    # documented alongside it is not reported.
+    named = {expand(span) for span in candidates}
+
+    out: list[dict] = []
+    seen: set[str] = set()
+    for span in candidates:
+        if span in seen:
+            continue
+        seen.add(span)
+        path = expand(span)
+        real = os.path.realpath(path)
+        if not os.path.exists(path):
+            out.append({"path": span, "kind": "missing", "real": None})
+        elif real != path and real not in named:
+            out.append({"path": span, "kind": "indirect", "real": real})
+    return out
+
+
 def transcripts_for_page(page: Path, root: Path) -> dict[int | None, Path]:
     """Lecture number -> transcript file, from a page's own frontmatter.
 
@@ -1109,6 +1174,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["table_rendering"])
         + len(results["transcript_citations"])
         + len(results["raw_frontmatter"])
+        + len(results["schema_paths"])
         + (1 if results["schema_split"] else 0)
     )
     suggestion_count = (
@@ -1311,6 +1377,31 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             for entry in results["raw_frontmatter"]:
                 fix = f" -> `{entry['fix']}`" if entry["fix"] else " (target not found)"
                 lines.append(f"- `{entry['path']}`: `{entry['raw']}`{fix}")
+            lines.append("")
+
+        if results["schema_paths"]:
+            lines.append(
+                f"### Paths in the schema file that have moved "
+                f"({len(results['schema_paths'])})\n"
+            )
+            lines.append(
+                "The schema file names script and tool locations in prose and "
+                "nothing validates them, so when one moves the file goes on "
+                "asserting the old location. It stays quiet because a move "
+                "usually leaves a symlink behind: every documented command "
+                "still runs while the documented path is wrong. `missing` "
+                "means the path is not there at all. `via symlink` means it "
+                "resolves only by traversing a link, to a real location this "
+                "file never names — name the real path beside it to clear "
+                "the finding.\n"
+            )
+            for entry in results["schema_paths"]:
+                if entry["kind"] == "missing":
+                    lines.append(f"- `{entry['path']}` — missing")
+                else:
+                    lines.append(
+                        f"- `{entry['path']}` — via symlink -> `{entry['real']}`"
+                    )
             lines.append("")
 
         if results["transcript_citations"]:
@@ -1554,6 +1645,7 @@ def main() -> int:
         citation_files, root, args.min_drift
     )
     raw_frontmatter = check_raw_frontmatter(md_files, root)
+    schema_paths = check_schema_paths(root)
 
     results = {
         "broken_links": broken,
@@ -1578,6 +1670,7 @@ def main() -> int:
         "table_rendering": table_rendering,
         "transcript_citations": transcript_citations,
         "raw_frontmatter": raw_frontmatter,
+        "schema_paths": schema_paths,
     }
 
     report = render_report(
@@ -1597,7 +1690,7 @@ def main() -> int:
         + len(index_duplicates) + len(hot_health) + len(overtagged)
         + len(wikilink_collisions) + len(backticked)
         + len(broken_anchors) + len(table_rendering)
-        + len(transcript_citations) + len(raw_frontmatter)
+        + len(transcript_citations) + len(raw_frontmatter) + len(schema_paths)
     )
     suggestion_count = (
         len(log_gaps) + len(single_use_tags) + (1 if schema_version else 0)
