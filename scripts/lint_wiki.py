@@ -572,34 +572,60 @@ def check_slug_conventions(md_files: list[Path]) -> list[Path]:
     return bad
 
 
-def check_broken_anchors(md_files: list[Path]) -> list[dict]:
-    """Same-page heading links — `[[#Section]]` — pointing at no such heading.
+def check_broken_anchors(md_files: list[Path], wiki_dir: Path) -> list[dict]:
+    """Heading links pointing at no such heading — same-page or cross-page.
 
-    An in-page anchor names no page, so the dangling-link check cannot see it:
-    rename the heading and the link fails silently, looking correct in the
-    source but navigating nowhere. Pages that open with a table of contents
+    Two shapes: `[[#Section]]` (same page) and `[[page#Section]]` (another
+    page). Neither is visible to the dangling-link check: the first names no
+    page, and the second's page part resolves fine while the heading part is
+    never read. Rename the heading and the link fails silently, looking
+    correct in the source but navigating nowhere. Pages that open with a table
+    of contents, and hub pages made of links into other pages' sections,
     depend on these, so a stale one is a real defect.
 
     Matching follows Obsidian: the anchor is the heading's own text, compared
-    case-insensitively with whitespace collapsed. Block references (`[[#^id]]`)
-    are skipped — those address a block, not a heading.
+    case-insensitively with whitespace collapsed; for a nested `a#b#c` link
+    the last segment is compared. Block references (`#^id`) are skipped —
+    those address a block, not a heading. So are links to attachments
+    (`doc.pdf#page=3`) and to pages that don't exist, which the
+    dangling-link check already reports.
     """
     out: list[dict] = []
+    heading_cache: dict[Path, set[str]] = {}
 
     def norm(text: str) -> str:
         return " ".join(text.split()).casefold()
 
+    def headings_of(path: Path) -> set[str]:
+        if path not in heading_cache:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            heading_cache[path] = {
+                norm(m.group(1)) for m in re.finditer(r"(?m)^#{1,6} +(.+?)\s*$", text)
+            }
+        return heading_cache[path]
+
     for md in md_files:
         text = md.read_text(encoding="utf-8", errors="replace")
-        headings = {norm(m.group(1)) for m in re.finditer(r"(?m)^#{1,6} +(.+?)\s*$", text)}
-        if not headings:
-            continue
         for i, line in enumerate(text.splitlines(), 1):
-            for m in re.finditer(r"\[\[#([^\]|\\]+)(?:\\?\|[^\]]*)?\]\]", line):
+            for m in WIKILINK_PATTERN.finditer(line):
                 target = m.group(1).strip()
-                if target.startswith("^"):
+                if "#" not in target:
                     continue
-                if norm(target) not in headings:
+                page, _, anchor = target.partition("#")
+                page = page.strip()
+                anchor = anchor.split("#")[-1].strip()
+                if not anchor or anchor.startswith("^"):
+                    continue
+                if not page:
+                    dest = md
+                else:
+                    if re.search(r"\.[A-Za-z0-9]+$", page):
+                        continue
+                    matches = list(wiki_dir.rglob(f"{page}.md"))
+                    if not matches:
+                        continue
+                    dest = matches[0]
+                if norm(anchor) not in headings_of(dest):
                     out.append({
                         "path": str(md),
                         "line": i,
@@ -1342,14 +1368,14 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
 
         if results["broken_anchors"]:
             lines.append(
-                f"### Broken in-page anchors — won't jump "
+                f"### Broken heading anchors — won't jump "
                 f"({len(results['broken_anchors'])})\n"
             )
             lines.append(
-                "A `[[#Section]]` link whose heading no longer exists on that "
-                "page. It names no page, so the dangling-link check cannot see "
-                "it — the link just silently goes nowhere. Fix the anchor or "
-                "restore the heading.\n"
+                "A `[[#Section]]` or `[[page#Section]]` link whose heading no "
+                "longer exists on the target page. The dangling-link check reads "
+                "only the page part, so it cannot see this — the link just "
+                "silently goes nowhere. Fix the anchor or restore the heading.\n"
             )
             for entry in results["broken_anchors"]:
                 lines.append(
@@ -1656,7 +1682,7 @@ def main() -> int:
     # hand-written narrative prose where backticked real links matter too.
     backticked_files = [p for p in (md_files + [wiki_dir / "hot.md"]) if p.exists()]
     backticked = check_backticked_wikilinks(backticked_files, wiki_dir)
-    broken_anchors = check_broken_anchors(backticked_files)
+    broken_anchors = check_broken_anchors(backticked_files, wiki_dir)
     table_rendering = check_table_rendering(backticked_files)
     # index.md carries long-lived copies of source-page summaries, citations
     # included, so it is checked alongside the pages themselves.
