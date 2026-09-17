@@ -414,6 +414,65 @@ def check_hot_health(wiki_dir: Path, max_words: int) -> list[dict]:
     return findings
 
 
+def check_page_budget(
+    md_files: list[Path], wiki_dir: Path,
+    max_words_per_lecture: int, concept_max_words: int,
+) -> list[dict]:
+    """
+    A page that is a *map* of a source, or a concept page a reader reviews
+    from, has a length budget; past it the page stops compressing and the
+    reader goes back to the source. Two shapes, both quality tier:
+
+    - a source page whose frontmatter lists several ``lectures:`` (a video
+      course accumulated onto one page) is measured in body words per
+      lecture, against ``max_words_per_lecture``;
+    - a page under ``concepts/`` is measured in body words against
+      ``concept_max_words``.
+
+    Word counts skip frontmatter and fenced code blocks. Pages under
+    ``reports/`` are ignored.
+    """
+    findings: list[dict] = []
+    fence = re.compile(r"^```.*?^```", re.M | re.S)
+    for path in md_files:
+        rel = path.relative_to(wiki_dir)
+        if rel.parts and rel.parts[0] == "reports":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        fm = parse_frontmatter(text) or {}
+        body = text
+        if body.startswith("---\n"):
+            end = body.find("\n---", 4)
+            if end != -1:
+                body = body[end + 4:]
+        words = len(fence.sub("", body).split())
+        lectures = fm.get("lectures")
+        if isinstance(lectures, list) and len(lectures) >= 2:
+            per = words // len(lectures)
+            if per > max_words_per_lecture:
+                findings.append({
+                    "path": str(path),
+                    "issue": (
+                        f"{words} words over {len(lectures)} lectures = "
+                        f"{per}/lecture (budget {max_words_per_lecture}) — "
+                        "a map, not a transcript: move the audit trail to a "
+                        "threads note and the teaching to the concept page"
+                    ),
+                    "excess": per - max_words_per_lecture,
+                })
+        elif rel.parts and rel.parts[0] == "concepts" and words > concept_max_words:
+            findings.append({
+                "path": str(path),
+                "issue": (
+                    f"{words} words (budget {concept_max_words}) — the page a "
+                    "reader reviews from; trim the audit layer"
+                ),
+                "excess": words - concept_max_words,
+            })
+    findings.sort(key=lambda f: -f["excess"])
+    return findings
+
+
 def check_tag_health(
     md_files: list[Path], max_tags: int,
 ) -> tuple[list[dict], list[dict], int]:
@@ -1209,6 +1268,7 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
         + len(results["slug_mismatch"])
         + len(results["index_duplicates"])
         + len(results["hot_health"])
+        + len(results.get("page_budget", []))
         + len(results["overtagged"])
         + len(results["wikilink_collisions"])
         + len(results["backticked_links"])
@@ -1322,6 +1382,18 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
             )
             for h in results["hot_health"]:
                 lines.append(f"- `{h['path']}`: {h['issue']}")
+            lines.append("")
+        if results.get("page_budget"):
+            lines.append(f"### Pages over their length budget ({len(results['page_budget'])})\n")
+            lines.append(
+                "A source page that accumulates several lectures is a *map* of them "
+                f"(budget {thresholds.get('max_words_per_lecture')} words per lecture); a concept "
+                f"page is what a reader reviews from (budget {thresholds.get('concept_max_words')} "
+                "words). Past the budget the page has stopped compressing its source. "
+                "Worst first.\n"
+            )
+            for f in results["page_budget"]:
+                lines.append(f"- `{f['path']}`: {f['issue']}")
             lines.append("")
         if results["overtagged"]:
             lines.append(
@@ -1640,6 +1712,17 @@ def main() -> int:
         help="hot.md over this many body words is flagged (default: 700).",
     )
     parser.add_argument(
+        "--max-words-per-lecture", type=int, default=400,
+        help=(
+            "A source page listing several `lectures:` in its frontmatter is "
+            "flagged when its body words per lecture exceed this (default: 400)."
+        ),
+    )
+    parser.add_argument(
+        "--concept-max-words", type=int, default=2000,
+        help="A page under concepts/ over this many body words is flagged (default: 2000).",
+    )
+    parser.add_argument(
         "--max-tags", type=int, default=4,
         help="Pages with more frontmatter tags than this are flagged (default: 4).",
     )
@@ -1674,6 +1757,9 @@ def main() -> int:
     slug_mismatch = check_slug_conventions(md_files)
     index_duplicates = check_index_duplicates(wiki_dir)
     hot_health = check_hot_health(wiki_dir, args.hot_max_words)
+    page_budget = check_page_budget(
+        md_files, wiki_dir, args.max_words_per_lecture, args.concept_max_words
+    )
     single_use_tags, overtagged, tag_unparsed = check_tag_health(md_files, args.max_tags)
     wikilink_collisions = check_wikilink_collisions(md_files, wiki_dir)
     schema_version = check_schema_version(root)
@@ -1705,6 +1791,7 @@ def main() -> int:
         "slug_mismatch": slug_mismatch,
         "index_duplicates": index_duplicates,
         "hot_health": hot_health,
+        "page_budget": page_budget,
         "single_use_tags": single_use_tags,
         "overtagged": overtagged,
         "tag_unparsed": tag_unparsed,
@@ -1726,6 +1813,8 @@ def main() -> int:
             "log_gap_days": args.log_gap_days,
             "max_tags": args.max_tags,
             "min_drift": args.min_drift,
+            "max_words_per_lecture": args.max_words_per_lecture,
+            "concept_max_words": args.concept_max_words,
         },
     )
 
@@ -1733,7 +1822,7 @@ def main() -> int:
     quality_count = (
         (1 if schema_split else 0)
         + len(orphans) + len(index_missing) + len(stubs) + len(slug_mismatch)
-        + len(index_duplicates) + len(hot_health) + len(overtagged)
+        + len(index_duplicates) + len(hot_health) + len(page_budget) + len(overtagged)
         + len(wikilink_collisions) + len(backticked)
         + len(broken_anchors) + len(table_rendering)
         + len(transcript_citations) + len(raw_frontmatter) + len(schema_paths)

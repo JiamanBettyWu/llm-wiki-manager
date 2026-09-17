@@ -27,6 +27,8 @@ Useful flags:
 - `--log-gap-days 60` — change the threshold for log-gap warnings (default 30).
 - `--hot-max-words 900` — change the hot.md bloat threshold (default 700).
 - `--max-tags 5` — change the per-page frontmatter tag limit (default 4).
+- `--max-words-per-lecture 400` — a source page whose frontmatter lists several `lectures:` is flagged when its body words per lecture exceed this (default 400). A lecture page is a map of its lectures; past this it has stopped compressing them.
+- `--concept-max-words 2000` — a page under `concepts/` over this many body words is flagged (default 2000). Concept pages are what a reader reviews from.
 
 The report is markdown, organized by severity (block / quality / suggestion). Past reports accumulate in `wiki/reports/`, giving you a longitudinal view of wiki health — "how was the wiki last month vs now". Git history of `wiki/reports/` is the audit trail.
 
