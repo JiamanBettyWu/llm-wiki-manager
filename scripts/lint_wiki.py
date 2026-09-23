@@ -1076,6 +1076,19 @@ def _quote_before(line: str, close_index: int) -> str | None:
     return None
 
 
+def _quote_starts(toks: list[tuple[int, str]], words: list[str]) -> list[int]:
+    """Cue starts at which a quote's opening words (up to eight) occur."""
+    if not toks:
+        return []
+    n = min(len(words), 8)
+    head = words[:n]
+    flat = [w for _, w in toks]
+    return sorted({
+        toks[i][0] for i in range(len(flat) - n + 1)
+        if flat[i:i + n] == head
+    })
+
+
 def check_transcript_citations(
     md_files: list[Path], root: Path, min_drift: int = 1
 ) -> list[dict]:
@@ -1098,9 +1111,18 @@ def check_transcript_citations(
     keeps the list to citations that point somewhere genuinely different.
     The default of 1 reports every drift.
 
+    Which transcript: a citation that names its page (``[[slug]] L3 @ 05:28``)
+    uses that page's; otherwise the citing page's own (``raw:`` + ``lectures:``);
+    otherwise — a concept page citing ``(L3 @ 05:28)`` — every page it links
+    that declares transcripts. Which lecture: an explicit ``L<n>``, else the
+    enclosing ``## L<n> ·`` section, else every lecture of the target. In the
+    last two cases the quote's own words pick the course and lecture: a quote
+    found in none of them is skipped as a paraphrase, never guessed at.
+    ``log.md`` gets no fallback — it is history, not a claim to keep true.
+
     Repeated phrasing is handled rather than reported: when a quote's opening
-    words occur at several points in the transcript, any of those cues is
-    accepted. Only the start is checked — an end time follows a quote that may
+    words occur at several points in the transcript — or in several candidate
+    transcripts — any of those cues is accepted. Only the start is checked — an end time follows a quote that may
     contain an ellipsis, and guessing there would cost more in false positives
     than it returns.
     """
@@ -1108,6 +1130,18 @@ def check_transcript_citations(
     page_cache: dict[Path, dict[int | None, Path]] = {}
     stream_cache: dict[Path, list[tuple[int, str]]] = {}
     by_slug = {p.stem: p for p in md_files}
+
+    def linked_sources(page: Path, text: str) -> list[Path]:
+        """Pages this page links that declare transcripts. The log is
+        history, not a claim to keep true, so it gets no fallback."""
+        if page.name == "log.md":
+            return []
+        seen: list[Path] = []
+        for wl in WIKILINK_PATTERN.finditer(text):
+            target = by_slug.get(wl.group(1).split("#", 1)[0].strip())
+            if target is not None and target not in seen and transcripts(target):
+                seen.append(target)
+        return seen
 
     def transcripts(page: Path) -> dict[int | None, Path]:
         if page not in page_cache:
@@ -1138,25 +1172,17 @@ def check_transcript_citations(
                 section_lecture = int(hm.group(1))
             for m in CITATION_PATTERN.finditer(line):
                 # Which page's transcripts? An explicit [[slug]] wins; a page
-                # that declares its own is the fallback.
-                target = by_slug.get(m.group("slug")) if m.group("slug") else md
-                if target is None:
-                    continue
-                table = transcripts(target)
-                if not table:
-                    continue
-                # Which lecture? Explicit L<n>, else the enclosing `## L<n> ·`
-                # section, else the page's single transcript.
-                if m.group("lec"):
-                    key: int | None = int(m.group("lec"))
-                elif target is md and section_lecture is not None:
-                    key = section_lecture
-                elif len(table) == 1:
-                    key = next(iter(table))
+                # that declares its own is next. A page with none of its own
+                # (a concept page citing `(L3 @ 05:28)`) tries every page it
+                # links that has transcripts: the quote's words pick the course.
+                if m.group("slug"):
+                    target = by_slug.get(m.group("slug"))
+                    targets = [target] if target is not None else []
+                elif own:
+                    targets = [md]
                 else:
-                    continue  # ambiguous on a multi-lecture page; don't guess
-                path = table.get(key)
-                if path is None:
+                    targets = linked_sources(md, text)
+                if not targets:
                     continue
                 quote = _quote_before(line, m.start("close"))
                 if quote is None:
@@ -1164,18 +1190,32 @@ def check_transcript_citations(
                 words = _normalize_words(quote)
                 if len(words) < 3:
                     continue  # too short to locate reliably
-                toks = stream(path)
-                if not toks:
-                    continue
-                n = min(len(words), 8)
-                head = words[:n]
-                flat = [w for _, w in toks]
-                starts = sorted({
-                    toks[i][0] for i in range(len(flat) - n + 1)
-                    if flat[i:i + n] == head
-                })
-                if not starts:
+                # Every candidate transcript the quote is found in, with the
+                # cue starts it is found at.
+                found: list[tuple[Path, list[int]]] = []
+                for target in targets:
+                    table = transcripts(target)
+                    if not table:
+                        continue
+                    # Which lecture? Explicit L<n>, else the enclosing
+                    # `## L<n> ·` section, else every lecture the target has —
+                    # the quote's words pick the one it comes from.
+                    if m.group("lec"):
+                        keys: list[int | None] = [int(m.group("lec"))]
+                    elif target is md and section_lecture is not None:
+                        keys = [section_lecture]
+                    else:
+                        keys = list(table)
+                    for key in keys:
+                        path = table.get(key)
+                        if path is None:
+                            continue
+                        hits = _quote_starts(stream(path), words)
+                        if hits:
+                            found.append((path, hits))
+                if not found:
                     continue  # quote not found — a paraphrase in quote marks
+                starts = sorted({s for _, hits in found for s in hits})
                 cited = _timestamp_seconds(m.group("ts"))
                 if cited in starts:
                     continue
@@ -1199,6 +1239,7 @@ def check_transcript_citations(
                 drift = min(abs(cited - s) for s in starts)
                 if drift < min_drift:
                     continue
+                path = min(found, key=lambda f: min(abs(cited - s) for s in f[1]))[0]
                 out.append({
                     "path": str(md),
                     "line": lineno,
