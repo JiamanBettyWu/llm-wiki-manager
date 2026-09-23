@@ -423,9 +423,11 @@ def check_page_budget(
     from, has a length budget; past it the page stops compressing and the
     reader goes back to the source. Two shapes, both quality tier:
 
-    - a source page whose frontmatter lists several ``lectures:`` (a video
-      course accumulated onto one page) is measured in body words per
-      lecture, against ``max_words_per_lecture``;
+    - a page under ``sources/`` whose frontmatter lists several
+      ``lectures:`` (a video course accumulated onto one page) is measured
+      in body words per lecture, against ``max_words_per_lecture``. Other
+      pages may carry ``lectures:`` too (for the citation check) and are
+      not measured this way;
     - a page under ``concepts/`` is measured in body words against
       ``concept_max_words``.
 
@@ -447,7 +449,10 @@ def check_page_budget(
                 body = body[end + 4:]
         words = len(fence.sub("", body).split())
         lectures = fm.get("lectures")
-        if isinstance(lectures, list) and len(lectures) >= 2:
+        # Only a source page is a map of its lectures. A threads note may also
+        # list ``lectures:`` so its citations are checked; it is not a map.
+        is_source = bool(rel.parts) and rel.parts[0] == "sources"
+        if is_source and isinstance(lectures, list) and len(lectures) >= 2:
             per = words // len(lectures)
             if per > max_words_per_lecture:
                 findings.append({
