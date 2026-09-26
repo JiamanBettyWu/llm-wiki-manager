@@ -799,11 +799,13 @@ CUE_TIME_PATTERN = re.compile(
 TRANSCRIPT_SUFFIXES = (".srt", ".vtt")
 # A timestamp citation, anchored on the quote's closing mark so the quote's
 # extent can be walked backwards from a known point. Optionally carries the
-# source page ([[slug]]) and the lecture (L3) the timestamp belongs to.
+# source page ([[slug]]), the module (M4) and the lecture (L3) the timestamp
+# belongs to.
 CITATION_PATTERN = re.compile(
     r"(?P<close>[\"”'])"
     r"[\s.,;:]*[—–-]?\s*\(?\s*"
     r"(?:see\s*)?(?:\[\[(?P<slug>[^\]|\\#]+)(?:\\?\|[^\]]*)?\]\]\s*)?"
+    r"(?:M(?P<mod>\d{1,2})\s+(?=L|Lecture))?"
     r"(?:(?:L|Lecture\s*)(?P<lec>\d{1,2})\s*)?"
     r"@?\s*"
     r"(?P<ts>\d{1,2}:\d{2}(?::\d{2})?)"
@@ -1114,7 +1116,11 @@ def check_transcript_citations(
     Which transcript: a citation that names its page (``[[slug]] L3 @ 05:28``)
     uses that page's; otherwise the citing page's own (``raw:`` + ``lectures:``);
     otherwise — a concept page citing ``(L3 @ 05:28)`` — every page it links
-    that declares transcripts. Which lecture: an explicit ``L<n>``, else the
+    that declares transcripts. A module label (``M4 L3 @ 05:28``) narrows
+    that choice to pages whose ``module:`` frontmatter is 4 — the citing page,
+    then the pages it links, then any page in the wiki — so a page that quotes
+    two modules side by side can label each one plainly. Which lecture: an
+    explicit ``L<n>``, else the
     enclosing ``## L<n> ·`` section, else every lecture of the target. In the
     last two cases the quote's own words pick the course and lecture: a quote
     found in none of them is skipped as a paraphrase, never guessed at.
@@ -1151,6 +1157,27 @@ def check_transcript_citations(
                 page_cache[page] = {}
         return page_cache[page]
 
+    module_cache: dict[Path, str | None] = {}
+
+    def module_of(page: Path) -> str | None:
+        """The page's `module:` frontmatter, as written (`4`, not `M4`)."""
+        if page not in module_cache:
+            meta = parse_frontmatter(page.read_text(encoding="utf-8", errors="replace"))
+            value = meta.get("module") if meta else None
+            module_cache[page] = str(value).strip() if isinstance(value, str) else None
+        return module_cache[page]
+
+    def module_sources(page: Path, text: str, mod: str) -> list[Path]:
+        """Pages with transcripts that belong to module `mod`: the citing
+        page, else the pages it links, else any page in the wiki. The quote's
+        words then pick among them, exactly as for an unlabelled citation."""
+        def match(pages):
+            return [p for p in pages if module_of(p) == mod and transcripts(p)]
+        return (
+            match([page]) or match(linked_sources(page, text))
+            or match(sorted(md_files))
+        )
+
     def stream(path: Path) -> list[tuple[int, str]]:
         if path not in stream_cache:
             stream_cache[path] = parse_transcript(path)
@@ -1178,6 +1205,10 @@ def check_transcript_citations(
                 if m.group("slug"):
                     target = by_slug.get(m.group("slug"))
                     targets = [target] if target is not None else []
+                elif m.group("mod") and md.name != "log.md" and (
+                    found_mod := module_sources(md, text, m.group("mod"))
+                ):
+                    targets = found_mod
                 elif own:
                     targets = [md]
                 else:
