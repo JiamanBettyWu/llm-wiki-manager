@@ -417,6 +417,7 @@ def check_hot_health(wiki_dir: Path, max_words: int) -> list[dict]:
 def check_page_budget(
     md_files: list[Path], wiki_dir: Path,
     max_words_per_lecture: int, concept_max_words: int,
+    concept_skip_sections: list[str] | None = None,
 ) -> list[dict]:
     """
     A page that is a *map* of a source, or a concept page a reader reviews
@@ -431,11 +432,21 @@ def check_page_budget(
     - a page under ``concepts/`` is measured in body words against
       ``concept_max_words``.
 
-    Word counts skip frontmatter and fenced code blocks. Pages under
-    ``reports/`` are ignored.
+    Word counts skip frontmatter and fenced code blocks. A concept page's
+    count also skips each ``## `` section named in ``concept_skip_sections``
+    (heading through to the next ``## `` or end of file; names match
+    case-insensitively): link lists such as ``Related`` and ``Sources`` are
+    navigation, not reading. Pages under ``reports/`` are ignored.
     """
     findings: list[dict] = []
     fence = re.compile(r"^```.*?^```", re.M | re.S)
+    skip = None
+    if concept_skip_sections:
+        names = "|".join(re.escape(n.strip()) for n in concept_skip_sections if n.strip())
+        if names:
+            skip = re.compile(
+                rf"^##[ \t]+(?:{names})[ \t]*$.*?(?=^##[ \t]|\Z)", re.M | re.S | re.I,
+            )
     for path in md_files:
         rel = path.relative_to(wiki_dir)
         if rel.parts and rel.parts[0] == "reports":
@@ -465,7 +476,9 @@ def check_page_budget(
                     ),
                     "excess": per - max_words_per_lecture,
                 })
-        elif rel.parts and rel.parts[0] == "concepts" and words > concept_max_words:
+        elif rel.parts and rel.parts[0] == "concepts" and (
+            words := len(fence.sub("", skip.sub("", body) if skip else body).split())
+        ) > concept_max_words:
             findings.append({
                 "path": str(path),
                 "issue": (
@@ -1466,7 +1479,12 @@ def render_report(results: dict, root: Path, thresholds: dict) -> str:
                 "A source page that accumulates several lectures is a *map* of them "
                 f"(budget {thresholds.get('max_words_per_lecture')} words per lecture); a concept "
                 f"page is what a reader reviews from (budget {thresholds.get('concept_max_words')} "
-                "words). Past the budget the page has stopped compressing its source. "
+                "words"
+                + (f", not counting its {', '.join(skipped)} sections" if (
+                    skipped := thresholds.get("concept_skip_sections") or []
+                ) else "")
+                + "). "
+                "Past the budget the page has stopped compressing its source. "
                 "Worst first.\n"
             )
             for f in results["page_budget"]:
@@ -1800,6 +1818,14 @@ def main() -> int:
         help="A page under concepts/ over this many body words is flagged (default: 2000).",
     )
     parser.add_argument(
+        "--concept-skip-sections", default="Related,Related concepts,Sources,See also",
+        help=(
+            "Comma-separated `## ` section names left out of a concept page's "
+            "word count, matched case-insensitively (default: "
+            "'Related,Related concepts,Sources,See also'). Pass '' to count everything."
+        ),
+    )
+    parser.add_argument(
         "--max-tags", type=int, default=4,
         help="Pages with more frontmatter tags than this are flagged (default: 4).",
     )
@@ -1835,7 +1861,8 @@ def main() -> int:
     index_duplicates = check_index_duplicates(wiki_dir)
     hot_health = check_hot_health(wiki_dir, args.hot_max_words)
     page_budget = check_page_budget(
-        md_files, wiki_dir, args.max_words_per_lecture, args.concept_max_words
+        md_files, wiki_dir, args.max_words_per_lecture, args.concept_max_words,
+        [n.strip() for n in args.concept_skip_sections.split(",") if n.strip()],
     )
     single_use_tags, overtagged, tag_unparsed = check_tag_health(md_files, args.max_tags)
     wikilink_collisions = check_wikilink_collisions(md_files, wiki_dir)
@@ -1892,6 +1919,9 @@ def main() -> int:
             "min_drift": args.min_drift,
             "max_words_per_lecture": args.max_words_per_lecture,
             "concept_max_words": args.concept_max_words,
+            "concept_skip_sections": [
+                n.strip() for n in args.concept_skip_sections.split(",") if n.strip()
+            ],
         },
     )
 
