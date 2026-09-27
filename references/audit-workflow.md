@@ -57,7 +57,17 @@ Keep frontmatter and `raw:` unchanged. Keep code only where the code *is* the le
 
 ### 7 · Trim the concept page if it is over budget
 
-It is the page the reader reviews from. The usual cuts: the long notation paragraph (→ threads note), printed tallies, a `## Sources` bullet that re-narrates the source, slide embeds duplicated from the map. Reordering *is* allowed on a concept page (it is forbidden on a source page, where errata are the record).
+It is the page the reader reviews from. **Move, don't delete.** A deletion-only trim loses summaries that exist nowhere else in the wiki, and git history keeps the old text where no reader reviews from it. Decide per section:
+
+| The section is… | Do |
+|---|---|
+| already covered on another page | shrink it to a one-line pointer, `[[page#Heading]]` |
+| unique, and belongs here | compress it in place |
+| unique, and big enough to stand alone | move it to a new sibling concept page and leave a one-line pointer |
+
+The trimmed page becomes a **hub**. Propose the table and let the user choose the target length before cutting. A new sibling page must still meet the wiki's bar for a page of its own (typically 2+ sources, or central to the topic). Before moving a section, run step 5's grep — and also search for prose references to the heading by name (`§"Heading"`), which no lint checks; keep headings that other pages cite byte-identical. *(First used on a 3,468-word framework page: two sections became sibling pages, persistence and streaming detail shrank to pointers at pages that already owned it, and the hub landed at ~1,700 words with nothing lost.)*
+
+The audit layer is still cut, not moved to a sibling: the long notation paragraph (→ threads note), printed tallies, a `## Sources` bullet that re-narrates the source, slide embeds duplicated from the map. Reordering *is* allowed on a concept page (it is forbidden on a source page, where errata are the record).
 
 ### 8 · Bookkeep, lint, commit
 
@@ -65,4 +75,4 @@ Index (pass the **existing** title verbatim — an "added" line means a duplicat
 
 ## What to report to the user
 
-Before/after word counts per page; which errata were *Yes* and why; which concept pointers had no target; anything you chose not to cut and why. Ask them to read one converted page against the lectures before converting the next batch — the calibration (bullets vs prose, words per lecture) came from that read, not from the numbers.
+Before/after word counts per page; which errata were *Yes* and why; which concept pointers had no target; for a concept trim, which sections moved to which sibling pages and which became pointers; anything you chose not to cut and why. Ask them to read one converted page against the lectures before converting the next batch — the calibration (bullets vs prose, words per lecture) came from that read, not from the numbers.

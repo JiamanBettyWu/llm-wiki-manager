@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Concept-page word budget skips link-list sections** (`--concept-skip-sections`, default `Related,Related concepts,Sources,See also`). A concept page's `## Related` and `## Sources` lists are navigation rather than reading, and they grow with every source that cites the page — so a page could creep over `--concept-max-words` without its readable body getting any longer. Each named `## ` section is dropped from heading to the next `## ` (or end of file), matched case-insensitively; the report header names the skipped sections. Source-page budgets are unchanged.
 
+- **Audit mode, step 7: trim a concept page by moving, not deleting.** Each section is sorted into *covered elsewhere → one-line pointer*, *unique and belongs here → compress*, or *unique and big enough → new sibling concept page*, and the trimmed page becomes a hub. A deletion-only trim lost summaries that existed nowhere else in the wiki. The audit layer (notation, tallies, re-narrated sources) is still cut.
+
 ### Backward compatibility
 - **Existing `CLAUDE.md`-only wikis are unaffected.** `lint_wiki.py` and `migrate_wiki.py` prefer `AGENTS.md` and fall back to `CLAUDE.md` for reading and for the `schema_version` stamp; `init_wiki.py` will not drop an `AGENTS.md` beside a real `CLAUDE.md` schema.
 
